@@ -8,7 +8,7 @@
 
 | 영역 | 기술 |
 |---|---|
-| 언어/프레임워크 | Java 21, Spring Boot 3.x |
+| 언어/프레임워크 | Java 21, Spring Boot 4.0.6 |
 | 보안 | Spring Security + JWT |
 | DB | PostgreSQL 16 |
 | 캐시/세션 | Redis 7 |
@@ -458,8 +458,8 @@ UNION ALL
 SELECT 'gallery_album', id, title FROM gallery_albums   WHERE description LIKE '%media:42%' AND deleted_at IS NULL
 UNION ALL
 SELECT 'gallery_photo', a.id, a.title FROM gallery_photos p
-  JOIN gallery_albums a ON a.id = p.album_id
-  WHERE p.media_id = 42 AND a.deleted_at IS NULL
+                                               JOIN gallery_albums a ON a.id = p.album_id
+WHERE p.media_id = 42 AND a.deleted_at IS NULL
 UNION ALL
 SELECT 'bulletin', id, title FROM bulletins WHERE media_id = 42 AND deleted_at IS NULL;
 ```
@@ -631,7 +631,45 @@ soft delete를 전제로 하므로 **모든 목록 조회 인덱스는 `WHERE de
 
 ---
 
-## 7. 파일 저장 (로컬 디스크 + 추상화)
+## 7. 패키지 구조 (도메인형)
+
+기술 계층이 아니라 **도메인 단위로 먼저 나누는** Package-by-Feature 방식을 채택한다(도메인이 또렷이 나뉘므로 응집도가 높고 도메인 추가·분리가 쉽다). 도메인 횡단 공통 요소는 `global`로, 비즈니스 도메인은 `domain` 아래에 둔다.
+
+```
+com.elipair.church
+├── ChurchBackendApplication.java
+│
+├── global/                      // 도메인 횡단 공통
+│   ├── config/                  // SecurityConfig, RedisConfig, SwaggerConfig, JpaConfig
+│   ├── security/                // JWT 발급·검증 필터, 인가, 위계(priority) 검증
+│   ├── exception/               // 전역 예외 핸들러(RFC 7807), 커스텀 예외
+│   ├── common/                  // 공통 응답(Page 래퍼), BaseEntity, 공통 enum
+│   └── storage/                 // FileStorage 인터페이스 + LocalFileStorage 구현
+│
+└── domain/
+    ├── auth/                    // 로그인·토큰 재발급·로그아웃
+    ├── member/                  // 회원·약관 동의 (controller/service/repository/entity/dto)
+    ├── role/                    // 역할·권한 (RBAC)
+    ├── position/                // 직분
+    ├── sermon/
+    ├── notice/
+    ├── event/
+    ├── department/
+    ├── tag/                     // 글로벌 태그 + content_tags
+    ├── media/                   // 중앙 미디어 라이브러리
+    ├── gallery/                 // 앨범·사진
+    └── bulletin/                // 주보
+```
+
+규칙:
+- 각 도메인 패키지 안은 `controller / service / repository / entity / dto`의 작은 계층으로 나눈다. 도메인이 단순하면(예: position) 하위 폴더 없이 파일만 둬도 된다 — 과도한 패키지 분리는 피한다.
+- **`global/common/BaseEntity`** (`@MappedSuperclass`)에 공통 컬럼을 모은다: `created_at`, `updated_at`(JPA Auditing), `created_by`, `updated_by`, `deleted_at`(soft delete), `version`(낙관적 락). 수정 가능한 콘텐츠 엔티티가 이를 상속해 감사·소프트삭제·낙관락을 일관 적용한다.
+- 인가·위계 검증, 전역 에러 매핑(RFC 7807), 파일 저장 추상화는 모두 `global`에 두어 도메인이 의존하게 한다(도메인 → global 단방향 의존).
+- `auth`는 member 데이터를 다루지만 관심사가 인증이라 별도 패키지로 둔다(초기엔 member에 통합 후 분리해도 무방).
+
+---
+
+## 8. 파일 저장 (로컬 디스크 + 추상화)
 
 - 업로드 파일은 **로컬 디스크**에 저장하고, 그 디렉터리(`FILE_UPLOAD_DIR`, 예: `/app/uploads`)를 **Docker named volume에 마운트**한다. 컨테이너를 지워도 volume이 살아있으면 파일은 보존된다.
 - 저장 로직은 `FileStorage` **인터페이스로 추상화**하고, 1차 구현은 `LocalFileStorage`로 한다. 향후 교회가 커져 OCI Object Storage나 S3로 옮길 경우 구현체만 교체하면 되도록(코드 철학: 교회별 차이는 설정/구현으로 분리) 설계한다.
@@ -640,7 +678,7 @@ soft delete를 전제로 하므로 **모든 목록 조회 인덱스는 `WHERE de
 
 ---
 
-## 8. Redis 사용처
+## 9. Redis 사용처
 - Refresh Token 저장, 로그아웃 토큰 블랙리스트
 - `/api/main`, 설교 목록 첫 페이지 캐싱 (`@Cacheable`)
 - 콘텐츠 CUD 시 해당 캐시 키 무효화 (`@CacheEvict`)
@@ -648,7 +686,7 @@ soft delete를 전제로 하므로 **모든 목록 조회 인덱스는 `WHERE de
 
 ---
 
-## 9. 환경변수 (.env로 분리, git 제외)
+## 10. 환경변수 (.env로 분리, git 제외)
 
 ```
 # 교회 식별
@@ -682,7 +720,7 @@ FILE_MAX_SIZE=10485760
 
 ---
 
-## 10. 인프라 (Docker)
+## 11. 인프라 (Docker)
 - `docker compose`로 postgres(16-alpine), redis(7-alpine), backend 3개 컨테이너 구성.
 - 컨테이너 간 통신은 같은 도커 네트워크 내에서 컨테이너명으로(예: `postgres`, `redis`). DB·Redis 포트는 호스트로 노출하지 않는다(보안).
 - backend는 postgres·redis가 healthy해진 뒤 시작(`depends_on` + healthcheck).
@@ -692,7 +730,7 @@ FILE_MAX_SIZE=10485760
 
 ---
 
-## 11. 새 교회 배포 체크리스트
+## 12. 새 교회 배포 체크리스트
 1. 백엔드 코드 복사 (수정 없음).
 2. `.env.example` → `.env` 복사 후 비밀번호 3종(DB_PASSWORD, REDIS_PASSWORD, JWT_SECRET)과 CORS_ALLOWED_ORIGIN 교체. **JWT_SECRET은 교회마다 반드시 달라야 한다.**
 3. `./gradlew build`로 jar 생성.

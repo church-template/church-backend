@@ -40,3 +40,6 @@ out/
 # SUH-DEVOPS-TEMPLATE: Auto-added entries
 # ====================================================================
 /.claude/settings.local.json
+
+# 로컬 이슈 초안 (GitHub 업로드용, 버전관리 제외)
+/.issues/

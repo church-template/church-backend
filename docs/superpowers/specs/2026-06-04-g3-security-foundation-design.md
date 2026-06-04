@@ -50,8 +50,8 @@
 
 신규 — `global/security/`:
 
-```
-JwtProperties.java            // @ConfigurationProperties("jwt"): secret, accessExpiry, refreshExpiry (초 단위), @Validated + @Positive(만료 값 0/음수 fail-fast)
+```text
+JwtProperties.java            // @ConfigurationProperties("jwt"): secret(@NotBlank), accessExpiry, refreshExpiry (초 단위), @Validated + @Positive(만료 값 0/음수 fail-fast) + @NotBlank(빈 secret fail-fast)
 JwtTokenProvider.java         // 발급(access·refresh) + 파싱·검증 (jjwt 0.12.x)
 MemberPrincipal.java          // record(Long id, String uuid, String name, int maxPriority) — SecurityContext principal
 JwtAuthenticationFilter.java  // OncePerRequestFilter: 토큰 추출→검증→jti null 가드→블랙리스트 read→SecurityContext 세팅
@@ -201,3 +201,7 @@ G3이 **키 이름이 아니라 세션 정책·TTL 기준·value schema까지** 
 9. **`JwtAuthenticationFilter` `jti != null` 가드.** 블랙리스트 체크 전 `jti != null` 조건을 추가했다(`claims.getId()` null 방어). 필터 단위 테스트 6개(추가: `expired_token_leaves_context_empty`). authorities 검증은 `.anyMatch(a -> a.getAuthority().equals("SERMON_WRITE"))`를 사용한다.
 
 10. **`SecurityConfigPathRulesTest` 9 tests.** 기존 계획의 7 tests에서 gallery 익명 401 케이스와 me 경로를 두 개의 독립 테스트로 분리해 9개가 됐다. `JwtPropertiesValidationTest` 2 tests.
+
+11. **`JwtProperties.secret` `@NotBlank` 추가(CR-3 반영).** 빈 문자열 secret을 바인딩 시점에 fail-fast로 거부한다. 32바이트 미만은 jjwt `Keys.hmacShaKeyFor`의 `WeakKeyException`이 추가 방어하므로 `@Size` 중복 제약은 추가하지 않는다. `JwtPropertiesValidationTest`에 `context_fails_when_secret_blank` 테스트 추가(3 tests).
+
+12. **Redis TTL 소수 초 보존(CR-4 반영).** `TokenBlacklist.blacklist`·`RefreshTokenStore.save` 양쪽에서 `toSeconds()` 내림 후 `Duration.ofSeconds()` 재포장 대신 `Duration.between(now, expiresAt)` 원본 `Duration`을 직접 Redis에 전달한다. 소수 초 정밀도를 보존하고 경계 조건은 `ttl.isZero() || ttl.isNegative()` 로 판단한다.

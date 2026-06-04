@@ -35,6 +35,8 @@
 8. **`@AutoConfigureMockMvc` SB4 패키지.** `org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc` (SB4 재배치). `org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc` 아님. Tasks 10·11 코드 블록 수정됨.
 9. **`JwtAuthenticationFilter` `jti != null` 가드 + 6 tests.** `isAccess && jti != null && !tokenBlacklist.isBlacklisted(jti)` — null 방어 추가. 필터 테스트 6개(추가: `expired_token_leaves_context_empty`). authorities 검증: `.anyMatch(a -> a.getAuthority().equals("SERMON_WRITE"))`. (Task 9 코드 블록 수정됨)
 10. **`SecurityConfigPathRulesTest` 9 tests.** gallery 익명 401, me 경로를 각각 독립 테스트로 분리. `JwtPropertiesValidationTest` 2 tests. (Task 10 코드 블록 수정됨)
+11. **`JwtProperties.secret` `@NotBlank` 추가(CR-3 반영).** 빈 문자열 secret을 바인딩 시점에 fail-fast로 거부. `@Size` 중복 제약 없음(32바이트 미만은 jjwt `WeakKeyException`이 방어). `JwtPropertiesValidationTest`에 `context_fails_when_secret_blank` 추가 → 3 tests. (Task 1 코드 블록 수정됨)
+12. **Redis TTL 소수 초 보존(CR-4 반영).** `TokenBlacklist.blacklist`·`RefreshTokenStore.save` 모두 `toSeconds()` 내림 + `Duration.ofSeconds()` 재포장 대신 원본 `Duration`을 직접 전달. 경계 조건은 `ttl.isZero() || ttl.isNegative()`. (Task 5·6 코드 블록 수정됨)
 
 ## File Structure
 
@@ -121,20 +123,22 @@ Expected: FAIL — `JwtProperties` 클래스 없음(컴파일 에러).
 ```java
 package com.elipair.church.global.security;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * JWT 설정(스펙 §4·§10). 만료값은 초 단위. secret은 HS256용 32바이트(256bit) 이상이어야 한다.
+ * JWT 설정(스펙 §4·§10). 만료값은 초 단위. secret은 @NotBlank이어야 하며, HS256용 32바이트(256bit) 이상이어야 한다.
  *
- * <p>만료값은 @Positive로 기동 시 검증한다(0/음수 주입 시 발급 토큰이 즉시 만료돼 인증이 전부 깨지는 것을 fail-fast).
+ * <p>만료값은 @Positive로, secret은 @NotBlank로 기동 시 검증한다(0/음수·빈 값 주입 시 fail-fast).
+ * 32바이트 미만 시크릿은 jjwt의 Keys.hmacShaKeyFor가 WeakKeyException으로 기동을 추가 거부한다.
  * 바인딩 시점에만 검증되므로(@Validated) 레코드를 직접 생성하는 단위 테스트에는 영향이 없다.
  */
 @Validated
 @ConfigurationProperties(prefix = "jwt")
 public record JwtProperties(
-        String secret,
+        @NotBlank String secret,
         @Positive long accessExpiry,
         @Positive long refreshExpiry) {}
 ```
@@ -628,11 +632,11 @@ public class TokenBlacklist {
     }
 
     public void blacklist(String jti, Instant expiresAt) {
-        long ttlSeconds = Duration.between(Instant.now(), expiresAt).toSeconds();
-        if (ttlSeconds <= 0) {
+        Duration ttl = Duration.between(Instant.now(), expiresAt);
+        if (ttl.isZero() || ttl.isNegative()) {
             return; // 이미 만료된 토큰 — 저장 불필요
         }
-        redis.opsForValue().set(PREFIX + jti, "1", Duration.ofSeconds(ttlSeconds));
+        redis.opsForValue().set(PREFIX + jti, "1", ttl);
     }
 
     public boolean isBlacklisted(String jti) {
@@ -759,11 +763,11 @@ public class RefreshTokenStore {
     }
 
     public void save(String uuid, String jti, Instant expiresAt) {
-        long ttlSeconds = Duration.between(Instant.now(), expiresAt).toSeconds();
-        if (ttlSeconds <= 0) {
+        Duration ttl = Duration.between(Instant.now(), expiresAt);
+        if (ttl.isZero() || ttl.isNegative()) {
             return;
         }
-        redis.opsForValue().set(key(uuid, jti), "1", Duration.ofSeconds(ttlSeconds));
+        redis.opsForValue().set(key(uuid, jti), "1", ttl);
     }
 
     public boolean isValid(String uuid, String jti) {

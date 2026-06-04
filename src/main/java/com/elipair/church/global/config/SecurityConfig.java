@@ -14,24 +14,20 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        http.csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // Swagger / OpenAPI — publicly accessible (toggled via SWAGGER_ENABLED)
-                        .requestMatchers(
-                                "/v3/api-docs",
-                                "/v3/api-docs/**",
-                                "/swagger-ui/**",
-                                "/swagger-ui.html"
-                        ).permitAll()
+                        .requestMatchers("/v3/api-docs", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
+                        .permitAll()
                         // Error dispatch — must be accessible to surface 404/5xx responses
-                        .requestMatchers("/error").permitAll()
+                        .requestMatchers("/error")
+                        .permitAll()
                         // Actuator health — docker-compose healthcheck requires unauthenticated access
-                        .requestMatchers("/actuator/health").permitAll()
-                        .anyRequest().authenticated()
-                );
+                        .requestMatchers("/actuator/health")
+                        .permitAll()
+                        .anyRequest()
+                        .authenticated());
         return http.build();
     }
 }

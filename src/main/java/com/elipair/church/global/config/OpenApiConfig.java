@@ -21,10 +21,12 @@ public class OpenApiConfig {
                         .description("교회 홈페이지 백엔드 REST API")
                         .version("v1"))
                 .addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME))
-                .components(new Components().addSecuritySchemes(BEARER_SCHEME,
-                        new SecurityScheme()
-                                .type(SecurityScheme.Type.HTTP)
-                                .scheme("bearer")
-                                .bearerFormat("JWT")));
+                .components(new Components()
+                        .addSecuritySchemes(
+                                BEARER_SCHEME,
+                                new SecurityScheme()
+                                        .type(SecurityScheme.Type.HTTP)
+                                        .scheme("bearer")
+                                        .bearerFormat("JWT")));
     }
 }

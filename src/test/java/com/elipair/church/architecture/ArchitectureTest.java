@@ -18,10 +18,10 @@ class ArchitectureTest {
     @ArchTest
     static final ArchRule global_must_not_depend_on_domain = noClasses()
             .that()
-            .resideInAPackage("..global..")
+            .resideInAPackage("com.elipair.church.global..")
             .should()
             .dependOnClassesThat()
-            .resideInAPackage("..domain..")
+            .resideInAPackage("com.elipair.church.domain..")
             .because("global은 도메인 횡단 공통이므로 domain에 의존하면 안 된다 (domain → global 단방향)")
             .allowEmptyShould(true);
 }

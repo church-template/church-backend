@@ -17,7 +17,7 @@ public class BusinessException extends RuntimeException {
     }
 
     public BusinessException(ErrorCode errorCode, String detail) {
-        super(detail);
+        super(detail != null && !detail.isBlank() ? detail : errorCode.getTitle());
         this.errorCode = errorCode;
     }
 }

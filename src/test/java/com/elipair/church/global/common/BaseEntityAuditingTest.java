@@ -36,4 +36,18 @@ class BaseEntityAuditingTest {
         assertThat(saved.getUpdatedBy()).isNull();
         assertThat(saved.isDeleted()).isFalse();
     }
+
+    @Test
+    void softDelete_marks_entity_deleted() {
+        AuditingTestEntity entity = em.persistFlushFind(new AuditingTestEntity("샘플"));
+        assertThat(entity.isDeleted()).isFalse();
+
+        entity.softDelete();
+        em.flush();
+        em.clear();
+
+        AuditingTestEntity reloaded = em.find(AuditingTestEntity.class, entity.getId());
+        assertThat(reloaded.isDeleted()).isTrue();
+        assertThat(reloaded.getDeletedAt()).isNotNull();
+    }
 }

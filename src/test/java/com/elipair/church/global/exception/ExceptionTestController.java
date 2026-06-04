@@ -27,6 +27,11 @@ class ExceptionTestController {
         throw new IllegalStateException("예상치 못한 오류");
     }
 
+    @GetMapping("/test/business-null-detail")
+    void businessNullDetail() {
+        throw new BusinessException(ErrorCode.DUPLICATE_RESOURCE, null);
+    }
+
     @PostMapping("/test/validate")
     void validate(@Valid @RequestBody SampleRequest request) {
         // 검증 통과 시 동작 없음

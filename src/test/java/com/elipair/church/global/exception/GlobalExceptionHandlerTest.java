@@ -52,4 +52,21 @@ class GlobalExceptionHandlerTest {
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.errorCode").value("INTERNAL_ERROR"));
     }
+
+    @Test
+    void malformed_json_body_maps_to_invalid_input_value() throws Exception {
+        mockMvc.perform(post("/test/validate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ not valid json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void businessException_with_null_detail_falls_back_to_title() throws Exception {
+        mockMvc.perform(get("/test/business-null-detail"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("DUPLICATE_RESOURCE"))
+                .andExpect(jsonPath("$.detail").value("이미 존재하는 리소스입니다"));
+    }
 }

@@ -126,7 +126,8 @@ public interface FileStorage {
 - `store` 키는 우리가 UUID로 생성하므로 원천 안전. 추가로 `target.startsWith(root)`를 항상 검증.
 - `load`/`delete`가 받는 `storedPath`는 (현재는 신뢰 가능한 DB 유래지만) 항상 `normalize()` 후 루트 내부인지 검증해 `../` 탈출을 방어한다(defense-in-depth).
 - 원본 파일명은 디스크 경로에 절대 반영하지 않는다(파일명 인젝션·충돌 차단). 확장자도 basename 추출 후 `^[a-z0-9]{1,10}$` 화이트리스트만 허용 — `startsWith(root)` 가드를 통과하더라도 키 계약을 깨는 입력(`jpg/../../x`)을 1차에서 거른다.
-- `load`/`delete`는 루트 내부의 **일반 파일**(`Files.isRegularFile`)만 대상 — 디렉터리·특수파일은 조회/삭제하지 않는다(데이터 무결성·defense-in-depth). 단 현재 서빙 경로는 id 기반이라 외부가 원시 경로를 직접 넘기지는 않는다.
+- `load`/`delete`는 루트 내부의 **일반 파일**(`Files.isRegularFile(target, NOFOLLOW_LINKS)`)만 대상 — 디렉터리·특수파일·**심볼릭 링크**는 조회/삭제하지 않는다(데이터 무결성·defense-in-depth). `NOFOLLOW_LINKS`로 루트 내부에 심어진 symlink가 루트 밖을 가리켜도 추종하지 않는다(코드리뷰 반영). 단 부모 경로 자체가 symlink가 되려면 볼륨 침해가 전제이고, 현재 서빙 경로는 id 기반이라 외부가 원시 경로를 직접 넘기지 않으므로 `toRealPath()` 재검증까지는 두지 않는다.
+- `store`는 `Files.copy`가 `FileAlreadyExistsException`(UUID 충돌, 사실상 불가)을 던지면 **부분 파일이 아니므로 정리(삭제)하지 않고** `FILE_STORAGE_ERROR`만 던진다 — 정리는 우리가 쓰던 파일에만 적용(기존 파일 보존, 코드리뷰 반영).
 
 ## 테스트 (TDD, `@TempDir` 단위)
 

@@ -129,4 +129,35 @@ class RoleServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
                         .isEqualTo(ErrorCode.ACCESS_DENIED));
     }
+
+    @Test
+    void delete_non_system_within_level_calls_delete() {
+        Role role = Role.create("EDITOR", 500, "편집자");
+        when(roleRepository.findById(1L)).thenReturn(Optional.of(role));
+
+        service().delete(1L, 1000);
+
+        verify(roleRepository).delete(role);
+    }
+
+    @Test
+    void delete_system_role_is_rejected() {
+        Role system = Role.create("X", 100, "x");
+        org.springframework.test.util.ReflectionTestUtils.setField(system, "isSystem", true);
+        when(roleRepository.findById(1L)).thenReturn(Optional.of(system));
+
+        assertThatThrownBy(() -> service().delete(1L, 1000))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(ErrorCode.ACCESS_DENIED));
+        verify(roleRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_unknown_id_is_not_found() {
+        when(roleRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().delete(999L, 1000))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+    }
 }

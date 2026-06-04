@@ -1,5 +1,7 @@
 package com.elipair.church.domain.role;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -182,5 +184,28 @@ class RoleApiTest {
                         .content("{\"description\":\"x\"}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    void delete_returns_204_and_removes() throws Exception {
+        long id = createRole("EDITOR", 500);
+
+        mockMvc.perform(delete("/api/admin/roles/" + id).header("Authorization", roleManager()))
+                .andExpect(status().isNoContent());
+
+        assertThat(roleRepository.existsById(id)).isFalse();
+    }
+
+    @Test
+    void delete_system_role_is_403() throws Exception {
+        long systemId = roleRepository.findAll().stream()
+                .filter(r -> r.getName().equals("USER"))
+                .findFirst()
+                .orElseThrow()
+                .getId();
+
+        mockMvc.perform(delete("/api/admin/roles/" + systemId).header("Authorization", roleManager()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
     }
 }

@@ -45,6 +45,14 @@ public class RoleService {
     }
 
     @Transactional
+    public void delete(Long id, int requesterMaxPriority) {
+        Role role = roleRepository.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        hierarchyValidator.validateMutable(requesterMaxPriority, role.getPriority(), role.isSystem());
+        roleRepository.delete(role);
+        // NOTE(#8): member_roles 도입 후, 회원에게 할당된 역할이면 삭제 전 409로 차단(블로킹 삭제)한다.
+    }
+
+    @Transactional
     public RoleResponse update(Long id, RoleUpdateRequest request, int requesterMaxPriority) {
         Role role = roleRepository.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         hierarchyValidator.validateMutable(requesterMaxPriority, role.getPriority(), role.isSystem());

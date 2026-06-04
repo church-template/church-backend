@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-church_db}
+      POSTGRES_USER: ${DB_USERNAME:-church_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-church_dev_pw}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-church_user} -d ${DB_NAME:-church_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-church_dev_redis}"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-church_dev_redis}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    image: church-backend:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_URL: ${DB_URL:-jdbc:postgresql://postgres:5432/church_db}
+      DB_USERNAME: ${DB_USERNAME:-church_user}
+      DB_PASSWORD: ${DB_PASSWORD:-church_dev_pw}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-church_dev_redis}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-in-production-0123456789}
+      JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-3600}
+      JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-1209600}
+      CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-http://localhost:3000}
+      FILE_UPLOAD_DIR: ${FILE_UPLOAD_DIR:-/app/uploads}
+      FILE_BASE_URL: ${FILE_BASE_URL:-http://localhost:8080/api/media}
+      FILE_MAX_SIZE: ${FILE_MAX_SIZE:-10485760}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads-data:${FILE_UPLOAD_DIR:-/app/uploads}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  postgres-data:
+  redis-data:
+  uploads-data:

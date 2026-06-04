@@ -9,5 +9,4 @@ public class ChurchBackendApplication {
     public static void main(String[] args) {
         SpringApplication.run(ChurchBackendApplication.class, args);
     }
-
 }

@@ -10,6 +10,18 @@ The repo is currently an **early scaffold**: only `ChurchBackendApplication` and
 
 Working language is **Korean**: commits, the spec, issue templates, and CodeRabbit reviews (`ko-KR`) are all in Korean.
 
+## Project rules (`.claude/rules/`)
+
+The sections below are the map; these files are the enforceable detail. **Consult the relevant one before implementing in that area:**
+
+- `rbac-authorization.md` — per-permission `@PreAuthorize`, priority hierarchy guards, self-role / last-SUPER_ADMIN protection, JWT shape, 3-way path authz.
+- `persistence-conventions.md` — `BaseEntity`, soft delete + partial indexes, `@Version`, `updated_by` author display, uuid/id immutability.
+- `api-conventions.md` — RFC 7807 error envelope + error codes, pagination envelope, raw-markdown body storage.
+- `media-library.md` — central media table, `media:{id}` refs, LIKE+FK reference tracking, blocking delete.
+- `multi-church-template.md` — no tenancy columns, everything via env, deliberate non-features (no SMTP), `FileStorage` abstraction.
+- `spring-boot-4.md` — SB4 starter coordinates and spec'd-but-unwired dependencies.
+- `versioning-ci.md` — automation-owned version/changelog files; don't hand-edit.
+
 ## Build & test
 
 Gradle wrapper, Java 21 toolchain.

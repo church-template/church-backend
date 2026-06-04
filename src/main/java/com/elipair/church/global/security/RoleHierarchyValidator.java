@@ -11,10 +11,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class RoleHierarchyValidator {
 
-    /** 대상 역할 priority가 요청자 maxPriority보다 strictly 낮아야 한다(escalation 차단). */
+    /** 대상 역할 priority가 요청자 maxPriority 이하여야 한다(같은 레벨 허용, 초과만 escalation 차단). */
     public void validateAssignable(int requesterMaxPriority, int targetPriority) {
-        if (targetPriority >= requesterMaxPriority) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED, "대상 역할의 priority가 요청자 권한 이상입니다");
+        if (targetPriority > requesterMaxPriority) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED, "대상 역할의 priority가 요청자 권한을 초과합니다");
         }
     }
 

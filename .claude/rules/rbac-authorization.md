@@ -16,7 +16,7 @@ Discord-style dynamic RBAC. See `docs/church-backend-spec.md` §3–§4 for the 
 
 ## Priority hierarchy guard (escalation prevention)
 
-A requester may only act on a role whose `priority` is **strictly less than** their own `maxPriority`. Equal or higher → `403`. Apply this identically to **all** of:
+A requester may only act on a role whose `priority` is **at or below** their own `maxPriority` (same level allowed). Strictly higher → `403`. Apply this identically to **all** of:
 
 - Grant/revoke a role to a member.
 - `PATCH /roles/{id}`, `DELETE /roles/{id}`, `PUT /roles/{id}/permissions`.

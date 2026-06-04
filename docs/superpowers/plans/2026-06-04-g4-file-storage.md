@@ -150,7 +150,7 @@ old:
 new:
 ```java
     DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "DUPLICATE_RESOURCE", "이미 존재하는 리소스입니다"),
-    FILE_SIZE_EXCEEDED(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_SIZE_EXCEEDED", "파일 크기가 허용 한도를 초과했습니다"),
+    FILE_SIZE_EXCEEDED(HttpStatus.CONTENT_TOO_LARGE, "FILE_SIZE_EXCEEDED", "파일 크기가 허용 한도를 초과했습니다"),
     FILE_STORAGE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_STORAGE_ERROR", "파일 처리 중 오류가 발생했습니다"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "서버 오류가 발생했습니다");
 ```
@@ -420,7 +420,7 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.core.io.PathResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -475,7 +475,7 @@ public class LocalFileStorage implements FileStorage {
         if (target == null || !Files.isRegularFile(target) || !Files.isReadable(target)) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
         }
-        return new PathResource(target);
+        return new FileSystemResource(target);
     }
 
     @Override

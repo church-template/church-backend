@@ -60,7 +60,7 @@ FileProperties.java     // @Validated @ConfigurationProperties("file") record: u
 
 수정 — 기존 파일:
 
-- `global/exception/ErrorCode.java` — `FILE_SIZE_EXCEEDED`(413 PAYLOAD_TOO_LARGE), `FILE_STORAGE_ERROR`(500 INTERNAL_SERVER_ERROR) 2종 추가. 빈 파일은 기존 `INVALID_INPUT_VALUE` 재사용.
+- `global/exception/ErrorCode.java` — `FILE_SIZE_EXCEEDED`(413 CONTENT_TOO_LARGE), `FILE_STORAGE_ERROR`(500 INTERNAL_SERVER_ERROR) 2종 추가. 빈 파일은 기존 `INVALID_INPUT_VALUE` 재사용. (SB4/Spring 7에서 `PAYLOAD_TOO_LARGE`는 deprecated → `CONTENT_TOO_LARGE` 사용.)
 - `.env.example` — `FILE_MAX_SIZE` 줄에 운영자용 주석 추가(스펙 §10과 일관).
 
 신규 — 테스트:
@@ -113,7 +113,7 @@ public interface FileStorage {
 
 **load(storedPath):**
 1. `target = root.resolve(storedPath).normalize()` → `target.startsWith(root)` 검증(경로우회 차단). 위반 시 `RESOURCE_NOT_FOUND`(존재 비노출).
-2. `Files.exists && Files.isRegularFile && Files.isReadable`가 **모두 참일 때만** 정상 → `PathResource`/`UrlResource` 반환. 그 외(미존재·비가독·디렉터리/특수파일·루트밖) → `RESOURCE_NOT_FOUND`(404).
+2. `Files.exists && Files.isRegularFile && Files.isReadable`가 **모두 참일 때만** 정상 → `FileSystemResource` 반환(SB4/Spring 7에서 `PathResource`는 deprecated). 그 외(미존재·비가독·디렉터리/특수파일·루트밖) → `RESOURCE_NOT_FOUND`(404).
 
 **delete(storedPath):**
 1. `load`와 동일한 정규화 + 루트내부 검증.

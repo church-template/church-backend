@@ -200,4 +200,26 @@ class RoleServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
                         .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
     }
+
+    @Test
+    void update_rename_to_existing_name_is_rejected() {
+        Role role = Role.create("EDITOR", 500, "편집자");
+        when(roleRepository.findById(1L)).thenReturn(Optional.of(role));
+        when(roleRepository.existsByName("AUTHOR")).thenReturn(true);
+
+        assertThatThrownBy(() -> service().update(1L, new RoleUpdateRequest("AUTHOR", null, null), 1000))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(ErrorCode.DUPLICATE_RESOURCE));
+        verify(roleRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void setPermissions_unknown_id_is_not_found() {
+        when(roleRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(
+                        () -> service().setPermissions(999L, new RolePermissionsRequest(List.of("SERMON_WRITE")), 1000))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+    }
 }

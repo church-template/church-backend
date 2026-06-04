@@ -262,4 +262,25 @@ class RoleApiTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
     }
+
+    @Test
+    void put_empty_permissions_clears_all() throws Exception {
+        long id = createRole("EDITOR", 500);
+
+        mockMvc.perform(put("/api/admin/roles/" + id + "/permissions")
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"permissions\":[\"SERMON_WRITE\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.permissions.length()").value(1));
+
+        mockMvc.perform(put("/api/admin/roles/" + id + "/permissions")
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"permissions\":[]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.permissions.length()").value(0));
+    }
 }

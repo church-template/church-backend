@@ -73,6 +73,8 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // 테스트 전용 JWT 시크릿(32바이트 이상). 운영 값은 .env의 JWT_SECRET로 주입된다.
+    environment 'JWT_SECRET', 'test-only-jwt-secret-please-change-0123456789'
     finalizedBy tasks.named('jacocoTestReport')
 }
 

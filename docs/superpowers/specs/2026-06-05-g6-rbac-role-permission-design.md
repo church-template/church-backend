@@ -74,7 +74,7 @@ CREATE TABLE role_permissions (
     permission_id BIGINT NOT NULL,
     PRIMARY KEY (role_id, permission_id),
     CONSTRAINT fk_rp_role       FOREIGN KEY (role_id)       REFERENCES roles (id)       ON DELETE CASCADE,
-    CONSTRAINT fk_rp_permission FOREIGN KEY (permission_id) REFERENCES permissions (id) ON DELETE CASCADE
+    CONSTRAINT fk_rp_permission FOREIGN KEY (permission_id) REFERENCES permissions (id) ON DELETE RESTRICT
 );
 
 -- (시드는 §4 참고)

@@ -131,7 +131,7 @@ G3이 **키 이름이 아니라 세션 정책·TTL 기준·value schema까지** 
 |---|---|---|
 | 토큰 없음/만료/위변조/잘못된 type, 보호 경로 익명 접근 | `JwtAuthenticationEntryPoint` | 401 `INVALID_TOKEN` |
 | 경로 단계 권한 부족(예: gallery에 `GALLERY_VIEW` 없음) | `JwtAccessDeniedHandler` | 403 `ACCESS_DENIED` |
-| 메서드 `@PreAuthorize` 거부(`AuthorizationDeniedException`) | `GlobalExceptionHandler` `@ExceptionHandler` | 403 `ACCESS_DENIED` |
+| 메서드 `@PreAuthorize` 거부(`AuthorizationDeniedException`) | `GlobalExceptionHandler` `@ExceptionHandler` | 익명→401 `INVALID_TOKEN` / 인증·권한부족→403 `ACCESS_DENIED` |
 | 위계 위반(`RoleHierarchyValidator`→`BusinessException`) | `GlobalExceptionHandler`(기존) | 403 `ACCESS_DENIED` |
 
 - 엔트리포인트/핸들러는 `ErrorResponse.of(...)` + 주입된 `ObjectMapper`로 직렬화(`application/problem+json` 또는 `application/json`, G2 응답과 동일 형식 유지).

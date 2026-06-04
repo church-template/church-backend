@@ -33,6 +33,12 @@ class JwtPropertiesValidationTest {
                 .run(context -> assertThat(context).hasNotFailed());
     }
 
+    @Test
+    void context_fails_when_secret_blank() {
+        runner.withPropertyValues("jwt.secret=", "jwt.access-expiry=3600", "jwt.refresh-expiry=1209600")
+                .run(context -> assertThat(context).hasFailed());
+    }
+
     @EnableConfigurationProperties(JwtProperties.class)
     @Configuration
     static class EnableJwtProps {}

@@ -33,11 +33,11 @@ public class RefreshTokenStore {
     }
 
     public void save(String uuid, String jti, Instant expiresAt) {
-        long ttlSeconds = Duration.between(Instant.now(), expiresAt).toSeconds();
-        if (ttlSeconds <= 0) {
+        Duration ttl = Duration.between(Instant.now(), expiresAt);
+        if (ttl.isZero() || ttl.isNegative()) {
             return;
         }
-        redis.opsForValue().set(key(uuid, jti), "1", Duration.ofSeconds(ttlSeconds));
+        redis.opsForValue().set(key(uuid, jti), "1", ttl);
     }
 
     public boolean isValid(String uuid, String jti) {

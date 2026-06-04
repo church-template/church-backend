@@ -22,11 +22,11 @@ public class TokenBlacklist {
     }
 
     public void blacklist(String jti, Instant expiresAt) {
-        long ttlSeconds = Duration.between(Instant.now(), expiresAt).toSeconds();
-        if (ttlSeconds <= 0) {
+        Duration ttl = Duration.between(Instant.now(), expiresAt);
+        if (ttl.isZero() || ttl.isNegative()) {
             return; // 이미 만료된 토큰 — 저장 불필요
         }
-        redis.opsForValue().set(PREFIX + jti, "1", Duration.ofSeconds(ttlSeconds));
+        redis.opsForValue().set(PREFIX + jti, "1", ttl);
     }
 
     public boolean isBlacklisted(String jti) {

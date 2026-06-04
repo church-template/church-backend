@@ -1,9 +1,17 @@
 package com.elipair.church.domain.role;
 
+import com.elipair.church.domain.role.dto.RoleCreateRequest;
 import com.elipair.church.domain.role.dto.RoleResponse;
+import com.elipair.church.global.security.MemberPrincipal;
+import jakarta.validation.Valid;
 import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -22,5 +30,11 @@ public class RoleController {
     @GetMapping
     public List<RoleResponse> list() {
         return service.list();
+    }
+
+    @PostMapping
+    public ResponseEntity<RoleResponse> create(
+            @Valid @RequestBody RoleCreateRequest request, @AuthenticationPrincipal MemberPrincipal principal) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request, principal.maxPriority()));
     }
 }

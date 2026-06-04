@@ -1,12 +1,15 @@
 package com.elipair.church.domain.role;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.elipair.church.TestcontainersConfiguration;
 import com.elipair.church.global.security.JwtTokenProvider;
 import com.elipair.church.global.security.MemberPrincipal;
+import com.jayway.jsonpath.JsonPath;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
@@ -15,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -74,5 +78,66 @@ class RoleApiTest {
         mockMvc.perform(get("/api/admin/roles").header("Authorization", token(100, "SERMON_WRITE")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
+    private long createRole(String name, int priority) throws Exception {
+        String json = mockMvc.perform(post("/api/admin/roles")
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"" + name + "\",\"priority\":" + priority + ",\"description\":\"d\"}"))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        return ((Number) JsonPath.read(json, "$.id")).longValue();
+    }
+
+    @Test
+    void create_returns_201_non_system_empty_permissions() throws Exception {
+        mockMvc.perform(post("/api/admin/roles")
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"EDITOR\",\"priority\":500,\"description\":\"편집자\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("EDITOR"))
+                .andExpect(jsonPath("$.isSystem").value(false))
+                .andExpect(jsonPath("$.permissions.length()").value(0));
+    }
+
+    @Test
+    void create_priority_above_requester_is_403() throws Exception {
+        mockMvc.perform(post("/api/admin/roles")
+                        .header("Authorization", token(900, "ROLE_MANAGE"))
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"TOOHIGH\",\"priority\":901,\"description\":\"d\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void create_duplicate_name_is_409() throws Exception {
+        createRole("EDITOR", 500);
+
+        mockMvc.perform(post("/api/admin/roles")
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"EDITOR\",\"priority\":600,\"description\":\"d\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("DUPLICATE_RESOURCE"));
+    }
+
+    @Test
+    void create_blank_name_is_400() throws Exception {
+        mockMvc.perform(post("/api/admin/roles")
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"  \",\"priority\":500}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
     }
 }

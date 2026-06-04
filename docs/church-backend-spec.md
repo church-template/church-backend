@@ -674,6 +674,7 @@ com.elipair.church
 - 업로드 파일은 **로컬 디스크**에 저장하고, 그 디렉터리(`FILE_UPLOAD_DIR`, 예: `/app/uploads`)를 **Docker named volume에 마운트**한다. 컨테이너를 지워도 volume이 살아있으면 파일은 보존된다.
 - 저장 로직은 `FileStorage` **인터페이스로 추상화**하고, 1차 구현은 `LocalFileStorage`로 한다. 향후 교회가 커져 OCI Object Storage나 S3로 옮길 경우 구현체만 교체하면 되도록(코드 철학: 교회별 차이는 설정/구현으로 분리) 설계한다.
 - 파일 접근 URL은 `FILE_BASE_URL` + 미디어 id로 조립한다. 본문은 `media:{id}`만 저장하므로 URL 베이스가 교회마다 달라도 본문은 불변.
+- 업로드 최대 크기는 운영자가 `FILE_MAX_SIZE`(바이트, 기본 10MB=10485760)로 설정한다. 코드에 박힌 고정값이 아니라 교회별 `.env`로 조정하는 값이며, 이 한도를 **초과하면 업로드를 거부**(`413 FILE_SIZE_EXCEEDED`)할 뿐 서버가 이미지를 리사이즈·압축하지는 않는다(렌더·가공은 프론트 몫). 검증은 `FileStorage` 저장 시점에서 수행한다.
 - OCI 배포 시: 업로드 volume을 OCI **Block Volume**에 연결하고 스냅샷 백업을 켤 것(권장). 단일 Compute 인스턴스 + docker compose 구성을 전제로 한다(다중 노드/OKE로 가면 공유 스토리지 필요).
 
 ---
@@ -713,7 +714,7 @@ CORS_ALLOWED_ORIGIN=https://gracechurch.kr
 # 파일 저장 (로컬 디스크 / Docker volume 마운트)
 FILE_UPLOAD_DIR=/app/uploads
 FILE_BASE_URL=https://gracechurch.kr/api/media
-FILE_MAX_SIZE=10485760
+FILE_MAX_SIZE=10485760       # 업로드 최대 크기(바이트). 운영자 조정값, 기본 10MB. 초과 시 업로드 거부
 ```
 
 `application.yml`은 위 변수를 `${DB_URL}` 형태로 읽어, 코드 수정 없이 교회별 배포가 되도록 한다. `.env.example`(값 비움)만 git에 커밋하고 `.env`는 `.gitignore`에 넣는다.

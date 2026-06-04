@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -175,6 +176,35 @@ class LocalFileStorageTest {
         // best-effort 정리로 부분 저장 파일이 남지 않아야 한다(디렉터리는 남을 수 있음).
         try (Stream<Path> paths = Files.walk(tempDir)) {
             assertThat(paths.filter(Files::isRegularFile)).isEmpty();
+        }
+    }
+
+    @Test
+    void load_and_delete_ignore_symlink_within_root_pointing_outside() throws IOException {
+        // 루트 내부에 심어진 심볼릭 링크가 루트 밖 파일을 가리켜도 추종하지 않아야 한다(NOFOLLOW_LINKS).
+        Path external = tempDir.resolveSibling("ext-" + tempDir.getFileName() + ".txt");
+        Files.writeString(external, "secret");
+        Path linkDir = tempDir.resolve("2026/06");
+        Files.createDirectories(linkDir);
+        Path link = linkDir.resolve("link.txt");
+        try {
+            Files.createSymbolicLink(link, external);
+        } catch (IOException | UnsupportedOperationException e) {
+            Files.deleteIfExists(external);
+            Assumptions.abort("심볼릭 링크 미지원 플랫폼");
+        }
+        try {
+            // load: 심볼릭 링크는 일반 파일로 취급하지 않음 → 404, 외부 파일 미노출
+            assertThatThrownBy(() -> storage.load("2026/06/link.txt"))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+            // delete: 심볼릭 링크는 no-op → 외부 파일 보존
+            assertThatCode(() -> storage.delete("2026/06/link.txt")).doesNotThrowAnyException();
+            assertThat(Files.exists(external)).isTrue();
+        } finally {
+            Files.deleteIfExists(link);
+            Files.deleteIfExists(external);
         }
     }
 }

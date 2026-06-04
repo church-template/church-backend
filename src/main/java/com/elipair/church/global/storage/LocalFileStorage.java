@@ -4,7 +4,9 @@ import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
@@ -55,8 +57,11 @@ public class LocalFileStorage implements FileStorage {
         try (InputStream in = file.getInputStream()) {
             Files.createDirectories(target.getParent());
             Files.copy(in, target);
+        } catch (FileAlreadyExistsException e) {
+            // target이 이미 존재(UUID 충돌, 사실상 불가) → 우리가 쓴 부분 파일이 아니므로 삭제하지 않는다(기존 파일 보존).
+            throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR);
         } catch (IOException e) {
-            deleteQuietly(target); // 부분 저장 파일 best-effort 정리
+            deleteQuietly(target); // 우리가 쓰던 부분 저장 파일 best-effort 정리
             throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR);
         }
         return key;
@@ -65,7 +70,7 @@ public class LocalFileStorage implements FileStorage {
     @Override
     public Resource load(String storedPath) {
         Path target = resolveWithinRoot(storedPath);
-        if (target == null || !Files.isRegularFile(target) || !Files.isReadable(target)) {
+        if (target == null || !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) || !Files.isReadable(target)) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
         }
         return new FileSystemResource(target);
@@ -74,8 +79,8 @@ public class LocalFileStorage implements FileStorage {
     @Override
     public void delete(String storedPath) {
         Path target = resolveWithinRoot(storedPath);
-        if (target == null || !Files.isRegularFile(target)) {
-            return; // 미존재·루트밖·디렉터리 → no-op (idempotent)
+        if (target == null || !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
+            return; // 미존재·루트밖·디렉터리·심볼릭 링크 → no-op (idempotent)
         }
         try {
             Files.deleteIfExists(target);

@@ -32,6 +32,8 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
 
     // DB 마이그레이션 (Flyway) — Spring Boot BOM이 버전 관리
+    // SB4: FlywayAutoConfiguration이 spring-boot-flyway 모듈로 분리됨(spring-boot-autoconfigure에 없음)
+    implementation 'org.springframework.boot:spring-boot-flyway'
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
 

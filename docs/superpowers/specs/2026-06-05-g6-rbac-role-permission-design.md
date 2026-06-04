@@ -213,7 +213,7 @@ public void validateAssignable(int requesterMaxPriority, int targetPriority) {
 
 ## 10. 패키지 구조 (`com.elipair.church.domain.role`, 플랫)
 
-```
+```text
 domain/role/
   Role.java                Permission.java
   RoleRepository.java       PermissionRepository.java

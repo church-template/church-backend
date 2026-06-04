@@ -161,7 +161,7 @@ CREATE TABLE roles (
 );
 CREATE INDEX idx_roles_priority ON roles (priority);
 
--- 역할 ↔ 권한 (다대다). 역할 물리 삭제 시 링크 동반 삭제.
+-- 역할 ↔ 권한 (다대다). 역할 물리 삭제 시 링크 동반 삭제(role 측 CASCADE). permission 측은 RESTRICT — 고정 카탈로그 보호.
 -- NOTE(#8 members): member_roles(member_id, role_id)와 members FK, 최초 SUPER_ADMIN 계정 시드는
 --   members 마이그레이션에서 추가한다. member_roles.role_id -> roles(id)는 RESTRICT(앱 레벨 블로킹 삭제).
 CREATE TABLE role_permissions (
@@ -169,7 +169,7 @@ CREATE TABLE role_permissions (
     permission_id BIGINT NOT NULL,
     PRIMARY KEY (role_id, permission_id),
     CONSTRAINT fk_rp_role       FOREIGN KEY (role_id)       REFERENCES roles (id)       ON DELETE CASCADE,
-    CONSTRAINT fk_rp_permission FOREIGN KEY (permission_id) REFERENCES permissions (id) ON DELETE CASCADE
+    CONSTRAINT fk_rp_permission FOREIGN KEY (permission_id) REFERENCES permissions (id) ON DELETE RESTRICT
 );
 
 -- 권한 12종(스펙 §3.3)

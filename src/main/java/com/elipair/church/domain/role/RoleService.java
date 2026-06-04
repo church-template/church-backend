@@ -2,6 +2,7 @@ package com.elipair.church.domain.role;
 
 import com.elipair.church.domain.role.dto.RoleCreateRequest;
 import com.elipair.church.domain.role.dto.RoleResponse;
+import com.elipair.church.domain.role.dto.RoleUpdateRequest;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import com.elipair.church.global.security.RoleHierarchyValidator;
@@ -41,6 +42,25 @@ public class RoleService {
             throw new BusinessException(ErrorCode.DUPLICATE_RESOURCE);
         }
         return persist(Role.create(name, request.priority(), normalizeDescription(request.description())));
+    }
+
+    @Transactional
+    public RoleResponse update(Long id, RoleUpdateRequest request, int requesterMaxPriority) {
+        Role role = roleRepository.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        hierarchyValidator.validateMutable(requesterMaxPriority, role.getPriority(), role.isSystem());
+
+        String name = null;
+        if (request.name() != null) {
+            name = normalizeName(request.name());
+            if (!name.equals(role.getName()) && roleRepository.existsByName(name)) {
+                throw new BusinessException(ErrorCode.DUPLICATE_RESOURCE);
+            }
+        }
+        if (request.priority() != null) {
+            hierarchyValidator.validateAssignable(requesterMaxPriority, request.priority());
+        }
+        role.update(name, request.priority(), normalizeDescription(request.description()));
+        return persist(role);
     }
 
     // name UNIQUE 경합 백스톱(Position 패턴): 선검사를 빠져나간 동시 생성/수정을 saveAndFlush로 잡는다.

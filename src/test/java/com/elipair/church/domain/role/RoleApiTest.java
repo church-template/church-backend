@@ -1,6 +1,7 @@
 package com.elipair.church.domain.role;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -139,5 +140,47 @@ class RoleApiTest {
                         .content("{\"name\":\"  \",\"priority\":500}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void patch_updates_priority_within_level() throws Exception {
+        long id = createRole("EDITOR", 500);
+
+        mockMvc.perform(patch("/api/admin/roles/" + id)
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"priority\":700}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("EDITOR"))
+                .andExpect(jsonPath("$.priority").value(700));
+    }
+
+    @Test
+    void patch_system_role_is_403() throws Exception {
+        long systemId = roleRepository.findAll().stream()
+                .filter(r -> r.getName().equals("ADMIN"))
+                .findFirst()
+                .orElseThrow()
+                .getId();
+
+        mockMvc.perform(patch("/api/admin/roles/" + systemId)
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"변경시도\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void patch_unknown_id_is_404() throws Exception {
+        mockMvc.perform(patch("/api/admin/roles/999999")
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"x\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
     }
 }

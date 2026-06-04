@@ -8,9 +8,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.elipair.church.domain.role.dto.RoleCreateRequest;
+import com.elipair.church.domain.role.dto.RoleResponse;
+import com.elipair.church.domain.role.dto.RoleUpdateRequest;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import com.elipair.church.global.security.RoleHierarchyValidator;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -81,5 +84,49 @@ class RoleServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
                         .isEqualTo(ErrorCode.DUPLICATE_RESOURCE));
         verify(roleRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_partial_name_only_keeps_priority() {
+        Role role = Role.create("EDITOR", 500, "편집자");
+        when(roleRepository.findById(1L)).thenReturn(Optional.of(role));
+        when(roleRepository.existsByName("AUTHOR")).thenReturn(false);
+        when(roleRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        RoleResponse result = service().update(1L, new RoleUpdateRequest("AUTHOR", null, null), 1000);
+
+        assertThat(result.name()).isEqualTo("AUTHOR");
+        assertThat(result.priority()).isEqualTo(500);
+    }
+
+    @Test
+    void update_system_role_is_rejected() {
+        Role system = Role.create("X", 100, "x");
+        org.springframework.test.util.ReflectionTestUtils.setField(system, "isSystem", true);
+        when(roleRepository.findById(1L)).thenReturn(Optional.of(system));
+
+        assertThatThrownBy(() -> service().update(1L, new RoleUpdateRequest("Y", null, null), 1000))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(ErrorCode.ACCESS_DENIED));
+        verify(roleRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_unknown_id_is_not_found() {
+        when(roleRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().update(999L, new RoleUpdateRequest("Y", null, null), 1000))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    @Test
+    void update_priority_above_requester_is_rejected() {
+        Role role = Role.create("EDITOR", 500, "편집자");
+        when(roleRepository.findById(1L)).thenReturn(Optional.of(role));
+
+        assertThatThrownBy(() -> service().update(1L, new RoleUpdateRequest(null, 901, null), 900))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(ErrorCode.ACCESS_DENIED));
     }
 }

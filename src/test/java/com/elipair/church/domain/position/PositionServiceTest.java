@@ -122,6 +122,14 @@ class PositionServiceTest {
     }
 
     @Test
+    void create_null_name_throws_invalid_input() {
+        assertThatThrownBy(() -> service.create(new PositionCreateRequest(null, 10)))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+        verify(repository, never()).existsByName(any());
+    }
+
+    @Test
     void update_name_only_keeps_sort_order() {
         when(repository.findById(1L)).thenReturn(Optional.of(Position.of("목사", 10)));
         when(repository.existsByName("부목사")).thenReturn(false);

@@ -75,6 +75,9 @@ public class PositionService {
     }
 
     private String normalizeName(String raw) {
+        if (raw == null) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "직분 이름은 필수입니다");
+        }
         String trimmed = raw.trim();
         if (trimmed.isBlank()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "직분 이름은 공백일 수 없습니다");

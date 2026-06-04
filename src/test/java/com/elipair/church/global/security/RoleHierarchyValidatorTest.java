@@ -12,12 +12,14 @@ class RoleHierarchyValidatorTest {
     private final RoleHierarchyValidator validator = new RoleHierarchyValidator();
 
     @Test
-    void assignable_rejects_equal_or_higher_priority() {
-        assertThatThrownBy(() -> validator.validateAssignable(900, 900))
+    void assignable_allows_equal_rejects_higher_priority() {
+        // 같은 레벨은 허용(<=)
+        assertThatCode(() -> validator.validateAssignable(900, 900)).doesNotThrowAnyException();
+        // 초과는 거부
+        assertThatThrownBy(() -> validator.validateAssignable(900, 1000))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
-        assertThatThrownBy(() -> validator.validateAssignable(900, 1000)).isInstanceOf(BusinessException.class);
     }
 
     @Test
@@ -33,6 +35,19 @@ class RoleHierarchyValidatorTest {
     @Test
     void mutable_allows_non_system_lower_priority() {
         assertThatCode(() -> validator.validateMutable(1000, 100, false)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void mutable_allows_equal_priority_non_system() {
+        assertThatCode(() -> validator.validateMutable(900, 900, false)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void mutable_rejects_higher_priority_non_system() {
+        assertThatThrownBy(() -> validator.validateMutable(900, 1000, false))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
     }
 
     @Test

@@ -29,7 +29,7 @@
 
 1. **범위 = 스토리지 추상화만.** `FileStorage`·`LocalFileStorage`·`FileProperties` + `ErrorCode` 2종. `media` 테이블·업로드 컨트롤러·서빙 엔드포인트·참조추적·차단삭제는 **제외**(member 도메인 의존 → 후속). 이슈 본문 "선행 의존 없음(Phase 1)"과 정확히 일치.
 2. **입력 = `MultipartFile` 직접.** `store(MultipartFile)`. 가장 단순하며 향후 미디어 컨트롤러가 업로드받은 `MultipartFile`을 그대로 전달. Local·S3 구현 모두 처리 가능. `global`이 `spring-web`(이미 classpath)에 의존하는 게 유일 비용 — simplicity-first 원칙에 부합.
-3. **디스크 레이아웃 = 날짜 샤딩 + UUID.** `yyyy/MM/{uuid}.{ext}`. 단일 디렉터리 비대를 막고 백업·관리자 브라우징이 쉽다. 원본 파일명은 **디스크에 쓰지 않고**(충돌·경로우회 차단), 향후 `media.filename` 컬럼이 보관한다. 확장자만 소문자로 보존(서빙 시 content-type 힌트).
+3. **디스크 레이아웃 = 날짜 샤딩 + UUID.** `yyyy/MM/{uuid}.{ext}`. 단일 디렉터리 비대를 막고 백업·관리자 브라우징이 쉽다. 원본 파일명은 **디스크에 쓰지 않고**(충돌·경로우회 차단), 향후 `media.filename` 컬럼이 보관한다. **확장자는 basename에서만 추출**(예 `StringUtils.getFilenameExtension`)해 소문자 ASCII 화이트리스트(`^[a-z0-9]{1,10}$`)를 통과할 때만 보존하고(서빙 시 content-type 힌트), 통과 못 하거나 없으면 **확장자 없이** 저장한다 — `a.jpg/../evil`·`weird.<script>`·`a.` 같은 입력이 키 계약을 깨지 못하게 한다(슬래시·`..`·빈/비정상 확장자 차단). `startsWith(root)` 가드만으론 `jpg/../../x`류가 루트 내부 다른 경로로 새는 것을 못 막으므로 확장자 화이트리스트가 1차 방어다.
 4. **크기 검증 = `store()` 내부만.** `file.getSize() > maxSize`면 `FILE_SIZE_EXCEEDED`(413). #5엔 업로드 엔드포인트가 없으므로 서블릿 multipart 한도(`spring.servlet.multipart.max-file-size`)와 `MaxUploadSizeExceededException` 핸들러는 **후속 미디어 이슈**로 미룬다. 추상화가 규칙을 소유하고, 웹 레이어 없이 `store` 단위로 완결 테스트된다.
 5. **상한은 운영자 조정값(단일 전역).** `FILE_MAX_SIZE`(바이트, 기본 10MB) 하나로 모든 업로드에 적용. 코드 하드코딩 없이 교회별 `.env`로 조정. 초과 시 **거부**할 뿐 리사이즈·압축하지 않음(렌더·가공은 프론트 몫). 타입별 한도(이미지/PDF)는 MIME 분기가 필요해 media 도메인 몫 → 도입 시 후속. (스펙 §8·§10에 명문화 완료.)
 6. **URL 조립은 스토리지에 넣지 않음.** 스펙 §8 "URL = `FILE_BASE_URL` + 미디어 id"의 *미디어 id*는 `media` 테이블(DB) 개념이고 `FileStorage`는 `stored_path`만 다룬다. 프론트가 렌더 시 `media:{id}` → `${FILE_BASE_URL}/{id}`로 치환하고, 백엔드는 향후 `GET /api/media/{id}`로 바이트만 서빙. #5에선 `FileProperties.baseUrl()`을 **바인딩만** 해두고 실제 id 조립은 media 도메인으로 미뤄, 스토리지 계층에 media-id 의미가 새지 않게 한다.
@@ -55,12 +55,13 @@
 ```text
 FileStorage.java        // 인터페이스: store(MultipartFile)->String, load(String)->Resource, delete(String)->void
 LocalFileStorage.java   // @Component 구현 + @EnableConfigurationProperties(FileProperties.class)
-FileProperties.java     // @Validated @ConfigurationProperties("file") record: uploadDir(@NotBlank), baseUrl(@NotBlank), maxSize(@Positive)
+FileProperties.java     // @Validated @ConfigurationProperties("file") record: uploadDir(@NotBlank), baseUrl(@NotBlank · G4 미사용=바인딩/검증만, media 도메인이 소비), maxSize(@Positive)
 ```
 
 수정 — 기존 파일:
 
 - `global/exception/ErrorCode.java` — `FILE_SIZE_EXCEEDED`(413 PAYLOAD_TOO_LARGE), `FILE_STORAGE_ERROR`(500 INTERNAL_SERVER_ERROR) 2종 추가. 빈 파일은 기존 `INVALID_INPUT_VALUE` 재사용.
+- `.env.example` — `FILE_MAX_SIZE` 줄에 운영자용 주석 추가(스펙 §10과 일관).
 
 신규 — 테스트:
 
@@ -83,12 +84,15 @@ public interface FileStorage {
     String store(MultipartFile file);
 
     /**
-     * 저장 키로 파일을 조회한다(서빙·다운로드용).
-     * @throws BusinessException RESOURCE_NOT_FOUND(없음), FILE_STORAGE_ERROR(I/O 실패)
+     * 저장 키로 파일을 조회한다(서빙·다운로드용). 루트 내부의 일반 파일만 대상.
+     * @throws BusinessException RESOURCE_NOT_FOUND(없음·루트밖·디렉터리/특수파일), FILE_STORAGE_ERROR(I/O 실패)
      */
     Resource load(String storedPath);
 
-    /** 저장 키의 파일을 삭제한다. 없으면 무시(idempotent). @throws BusinessException FILE_STORAGE_ERROR(I/O 실패) */
+    /**
+     * 저장 키의 파일을 삭제한다. 관리 대상(루트 내부 일반 파일)만 제거하고,
+     * 미존재·루트밖·디렉터리/특수파일은 모두 no-op(idempotent). @throws BusinessException FILE_STORAGE_ERROR(I/O 실패)
+     */
     void delete(String storedPath);
 }
 ```
@@ -103,25 +107,26 @@ public interface FileStorage {
 **store(file):**
 1. `file.isEmpty()` → `INVALID_INPUT_VALUE`(400).
 2. `file.getSize() > maxSize` → `FILE_SIZE_EXCEEDED`(413).
-3. 키 생성: `LocalDate.now()` → `"yyyy/MM"`, 파일명 = `UUID.randomUUID()` + (원본 확장자 있으면 `"." + ext` 소문자). 원본 파일명 자체는 미사용.
+3. 키 생성: `LocalDate.now()` → `"yyyy/MM"`, 파일명 = `UUID.randomUUID()` + 안전 확장자. **확장자 = basename에서만 추출**(`getFilenameExtension`) → 소문자화 → 화이트리스트 `^[a-z0-9]{1,10}$` 통과 시에만 `"." + ext`, 아니면 생략. 원본 파일명 자체는 디스크 경로에 미사용(슬래시·`..`·비정상 문자 차단).
 4. `target = root.resolve(key).normalize()` → `target.startsWith(root)` 검증(방어), `Files.createDirectories(target.getParent())`, `file.transferTo(target)` (또는 `Files.copy(in, target)`).
-5. `IOException` → `FILE_STORAGE_ERROR`(500). 성공 시 `key`(슬래시 정규화) 반환.
+5. `IOException` → 부분 저장 파일 best-effort 삭제(`Files.deleteIfExists(target)`) 후 `FILE_STORAGE_ERROR`(500). 성공 시 `key`(슬래시 정규화) 반환. (임시파일+`ATOMIC_MOVE`는 이번 범위 밖 — best-effort 삭제로 충분.)
 
 **load(storedPath):**
 1. `target = root.resolve(storedPath).normalize()` → `target.startsWith(root)` 검증(경로우회 차단). 위반 시 `RESOURCE_NOT_FOUND`(존재 비노출).
-2. 미존재/비가독 → `RESOURCE_NOT_FOUND`(404). 정상 → `PathResource`/`UrlResource` 반환.
+2. `Files.exists && Files.isRegularFile && Files.isReadable`가 **모두 참일 때만** 정상 → `PathResource`/`UrlResource` 반환. 그 외(미존재·비가독·디렉터리/특수파일·루트밖) → `RESOURCE_NOT_FOUND`(404).
 
 **delete(storedPath):**
-1. `load`와 동일한 정규화 + 루트내부 검증. 루트를 **벗어나는 키 → `RESOURCE_NOT_FOUND`(거부**, 외부 파일 미접근).
-2. 루트 **내부의 정상 키 → `Files.deleteIfExists(target)`**로 제거하되 미존재면 no-op(idempotent). `IOException` → `FILE_STORAGE_ERROR`.
+1. `load`와 동일한 정규화 + 루트내부 검증.
+2. **관리 대상(루트 내부의 일반 파일, `Files.isRegularFile`)일 때만** `Files.deleteIfExists(target)`로 제거. 그 외(미존재·루트밖·디렉터리/특수파일)는 모두 **no-op**(best-effort, 필요 시 로그). `IOException` → `FILE_STORAGE_ERROR`.
 
-> 즉 "루트를 벗어나는 키"(공격성)와 "루트 내부의 미존재 키"(정상 idempotent)를 구분한다 — 전자는 거부, 후자는 no-op.
+> delete는 "관리 파일을 없앤다"가 목표라 **idempotent로 통일**한다 — 미존재·경로우회·디렉터리는 전부 조용히 no-op(루트 밖은 애초에 건드리지 않음). 예외는 실제 I/O 실패(`FILE_STORAGE_ERROR`)뿐이라, 호출자에게 보안 이벤트를 노출하지 않는다. load는 값을 돌려줘야 하므로 같은 비정상 입력을 `RESOURCE_NOT_FOUND`로 던진다(반환 불가라 무시할 수 없음).
 
 ## 보안 — 경로 우회 차단
 
 - `store` 키는 우리가 UUID로 생성하므로 원천 안전. 추가로 `target.startsWith(root)`를 항상 검증.
 - `load`/`delete`가 받는 `storedPath`는 (현재는 신뢰 가능한 DB 유래지만) 항상 `normalize()` 후 루트 내부인지 검증해 `../` 탈출을 방어한다(defense-in-depth).
-- 원본 파일명은 디스크 경로에 절대 반영하지 않는다(파일명 인젝션·충돌 차단).
+- 원본 파일명은 디스크 경로에 절대 반영하지 않는다(파일명 인젝션·충돌 차단). 확장자도 basename 추출 후 `^[a-z0-9]{1,10}$` 화이트리스트만 허용 — `startsWith(root)` 가드를 통과하더라도 키 계약을 깨는 입력(`jpg/../../x`)을 1차에서 거른다.
+- `load`/`delete`는 루트 내부의 **일반 파일**(`Files.isRegularFile`)만 대상 — 디렉터리·특수파일은 조회/삭제하지 않는다(데이터 무결성·defense-in-depth). 단 현재 서빙 경로는 id 기반이라 외부가 원시 경로를 직접 넘기지는 않는다.
 
 ## 테스트 (TDD, `@TempDir` 단위)
 
@@ -133,13 +138,16 @@ public interface FileStorage {
 | 2 | 크기 초과 | `FILE_SIZE_EXCEEDED` |
 | 3 | 빈 파일 | `INVALID_INPUT_VALUE` |
 | 4 | 확장자 없는 원본명 | 키에 확장자 없이 저장 성공 |
-| 5 | 원본명에 `../`·경로 포함 | 안전(원본명 미사용, 키는 UUID) |
+| 5 | 원본명 `a.jpg/../evil`·`weird.<script>`·`a.` 등 | 반환 키가 정확히 `yyyy/MM/<uuid>(.<safe-ext>)?` 패턴(슬래시·`..`·비정상 문자 0), 안전 확장자만 보존 또는 확장자 없이 저장 |
 | 6 | load 존재 | `Resource` 가독·내용 일치 |
-| 7 | load 미존재 | `RESOURCE_NOT_FOUND` |
-| 8 | load/delete storedPath=`../../etc/passwd` | 루트내부 검증으로 거부 |
-| 9 | delete 존재 | 파일 제거 |
-| 10 | delete 미존재 | no-op(idempotent) |
-| 11 | (선택) `FileProperties` 검증 | `maxSize` 0/음수·빈 `uploadDir` 기동 fail-fast (`ApplicationContextRunner`) |
+| 7 | load 미존재(루트 내부) | `RESOURCE_NOT_FOUND` |
+| 8 | load storedPath=`../../etc/passwd` | `RESOURCE_NOT_FOUND`(루트밖, 외부 파일 미노출) |
+| 9 | delete storedPath=`../../etc/passwd` | no-op(외부 파일 무손상, 예외 없음) |
+| 10 | load/delete storedPath=디렉터리(`2026/06`) | load `RESOURCE_NOT_FOUND` / delete no-op (`isRegularFile`) |
+| 11 | delete 존재 | 파일 제거 |
+| 12 | delete 미존재(루트 내부) | no-op(idempotent) |
+| 13 | (선택) store I/O 실패 | 부분 파일 미잔존(best-effort 삭제) |
+| 14 | (선택) `FileProperties` 검증 | `maxSize` 0/음수·빈 `uploadDir` 기동 fail-fast (`ApplicationContextRunner`) |
 
 ## 미루는 것 (명시적 비범위)
 

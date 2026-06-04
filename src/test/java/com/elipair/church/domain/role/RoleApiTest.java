@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -205,6 +206,59 @@ class RoleApiTest {
                 .getId();
 
         mockMvc.perform(delete("/api/admin/roles/" + systemId).header("Authorization", roleManager()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void put_permissions_replaces_set() throws Exception {
+        long id = createRole("EDITOR", 500);
+
+        mockMvc.perform(put("/api/admin/roles/" + id + "/permissions")
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"permissions\":[\"SERMON_WRITE\",\"NOTICE_WRITE\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.permissions.length()").value(2));
+
+        // 재설정으로 전체 교체 확인
+        mockMvc.perform(put("/api/admin/roles/" + id + "/permissions")
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"permissions\":[\"GALLERY_VIEW\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.permissions.length()").value(1))
+                .andExpect(jsonPath("$.permissions[0].name").value("GALLERY_VIEW"));
+    }
+
+    @Test
+    void put_unknown_permission_is_400() throws Exception {
+        long id = createRole("EDITOR", 500);
+
+        mockMvc.perform(put("/api/admin/roles/" + id + "/permissions")
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"permissions\":[\"NOPE\"]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void put_permissions_on_system_role_is_403() throws Exception {
+        long systemId = roleRepository.findAll().stream()
+                .filter(r -> r.getName().equals("USER"))
+                .findFirst()
+                .orElseThrow()
+                .getId();
+
+        mockMvc.perform(put("/api/admin/roles/" + systemId + "/permissions")
+                        .header("Authorization", roleManager())
+                        .characterEncoding(StandardCharsets.UTF_8)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"permissions\":[\"GALLERY_VIEW\"]}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
     }

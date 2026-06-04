@@ -1,12 +1,15 @@
 package com.elipair.church.domain.role;
 
 import com.elipair.church.domain.role.dto.RoleCreateRequest;
+import com.elipair.church.domain.role.dto.RolePermissionsRequest;
 import com.elipair.church.domain.role.dto.RoleResponse;
 import com.elipair.church.domain.role.dto.RoleUpdateRequest;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import com.elipair.church.global.security.RoleHierarchyValidator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +53,21 @@ public class RoleService {
         hierarchyValidator.validateMutable(requesterMaxPriority, role.getPriority(), role.isSystem());
         roleRepository.delete(role);
         // NOTE(#8): member_roles 도입 후, 회원에게 할당된 역할이면 삭제 전 409로 차단(블로킹 삭제)한다.
+    }
+
+    @Transactional
+    public RoleResponse setPermissions(Long id, RolePermissionsRequest request, int requesterMaxPriority) {
+        Role role = roleRepository.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        hierarchyValidator.validateMutable(requesterMaxPriority, role.getPriority(), role.isSystem());
+
+        // 중복은 흡수, 미지 키만 거부.
+        Set<String> names = new LinkedHashSet<>(request.permissions());
+        List<Permission> found = permissionRepository.findByNameIn(names);
+        if (found.size() != names.size()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "존재하지 않는 권한이 포함되어 있습니다");
+        }
+        role.replacePermissions(found);
+        return RoleResponse.from(role);
     }
 
     @Transactional

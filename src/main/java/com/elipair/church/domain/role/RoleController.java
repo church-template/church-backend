@@ -1,6 +1,7 @@
 package com.elipair.church.domain.role;
 
 import com.elipair.church.domain.role.dto.RoleCreateRequest;
+import com.elipair.church.domain.role.dto.RolePermissionsRequest;
 import com.elipair.church.domain.role.dto.RoleResponse;
 import com.elipair.church.domain.role.dto.RoleUpdateRequest;
 import com.elipair.church.global.security.MemberPrincipal;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -55,5 +57,13 @@ public class RoleController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id, @AuthenticationPrincipal MemberPrincipal principal) {
         service.delete(id, principal.maxPriority());
+    }
+
+    @PutMapping("/{id}/permissions")
+    public RoleResponse setPermissions(
+            @PathVariable Long id,
+            @Valid @RequestBody RolePermissionsRequest request,
+            @AuthenticationPrincipal MemberPrincipal principal) {
+        return service.setPermissions(id, request, principal.maxPriority());
     }
 }

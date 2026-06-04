@@ -8,11 +8,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.elipair.church.domain.role.dto.RoleCreateRequest;
+import com.elipair.church.domain.role.dto.RolePermissionsRequest;
 import com.elipair.church.domain.role.dto.RoleResponse;
 import com.elipair.church.domain.role.dto.RoleUpdateRequest;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import com.elipair.church.global.security.RoleHierarchyValidator;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -159,5 +161,43 @@ class RoleServiceTest {
         assertThatThrownBy(() -> service().delete(999L, 1000))
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
                         .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    @Test
+    void setPermissions_replaces_with_known_keys() {
+        Role role = Role.create("EDITOR", 500, "편집자");
+        when(roleRepository.findById(1L)).thenReturn(Optional.of(role));
+        when(permissionRepository.findByNameIn(any()))
+                .thenReturn(List.of(Permission.of("SERMON_WRITE", "설교"), Permission.of("NOTICE_WRITE", "공지")));
+
+        RoleResponse result =
+                service().setPermissions(1L, new RolePermissionsRequest(List.of("SERMON_WRITE", "NOTICE_WRITE")), 1000);
+
+        assertThat(result.permissions()).extracting("name").containsExactlyInAnyOrder("SERMON_WRITE", "NOTICE_WRITE");
+    }
+
+    @Test
+    void setPermissions_dedups_duplicate_request() {
+        Role role = Role.create("EDITOR", 500, "편집자");
+        when(roleRepository.findById(1L)).thenReturn(Optional.of(role));
+        when(permissionRepository.findByNameIn(any())).thenReturn(List.of(Permission.of("GALLERY_VIEW", "갤러리")));
+
+        // 중복 요청이 미지 키 400으로 오인되지 않아야 함
+        RoleResponse result =
+                service().setPermissions(1L, new RolePermissionsRequest(List.of("GALLERY_VIEW", "GALLERY_VIEW")), 1000);
+
+        assertThat(result.permissions()).extracting("name").containsExactly("GALLERY_VIEW");
+    }
+
+    @Test
+    void setPermissions_unknown_key_is_invalid_input() {
+        Role role = Role.create("EDITOR", 500, "편집자");
+        when(roleRepository.findById(1L)).thenReturn(Optional.of(role));
+        when(permissionRepository.findByNameIn(any())).thenReturn(List.of(Permission.of("SERMON_WRITE", "설교")));
+
+        assertThatThrownBy(() ->
+                        service().setPermissions(1L, new RolePermissionsRequest(List.of("SERMON_WRITE", "NOPE")), 1000))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
     }
 }

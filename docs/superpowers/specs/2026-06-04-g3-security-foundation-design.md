@@ -9,7 +9,7 @@
 
 ## 목표 / 성공 기준
 
-스펙 §4의 인증·인가 토대를 `global/security`에 한 번에 못 박는다. **도메인(auth·member·role) 코드는 만들지 않는다** — 인프라(JWT 유틸·필터·SecurityConfig·RedisConfig·위계 유틸·메서드 보안)만 짓고, 컨트롤러가 없으므로 테스트 전용 컨트롤러로 검증한다.
+스펙 §4의 인증·인가 토대를 `global/security`에 한 번에 못 박는다. **도메인(auth·member·role) 코드는 만들지 않는다** — 인프라(JWT 유틸·필터·SecurityConfig·Redis 저장소·위계 유틸·메서드 보안)만 짓고, 컨트롤러가 없으므로 테스트 전용 컨트롤러로 검증한다.
 
 성공 기준:
 1. `JwtTokenProvider`가 access/refresh 토큰을 발급하고, 서명·만료·type·위변조를 검증한다(만료값은 `.env` 주입).
@@ -27,7 +27,7 @@
 
 1. **경로 인가 = "스펙 그대로"(공개 기본).** `anyRequest().authenticated()` 같은 default-deny를 쓰지 않는다. `/api/admin/**`는 `authenticated()`(세부 권한은 메서드 `@PreAuthorize`), `/api/gallery/**`는 `hasAuthority("GALLERY_VIEW")`, 인프라 경로는 permit, 그 외 `/api/**`는 `permitAll()`. 인증이 필요한 **비관리 엔드포인트**(`/api/members/me`, `/api/auth/logout`)는 각 도메인이 메서드 보안으로 자체 방어 → `global`이 도메인 경로를 추적하지 않아 템플릿 철학(코드 불변·도메인 추가 자유)에 부합한다.
 2. **`mid` 클레임 추가.** JWT는 `sub=uuid`(외부 식별자) 외에 내부 `member.id`(Long)를 private claim `mid`로 싣는다. 필터가 `MemberPrincipal.id`에 담고 `AuditorAware`가 그 값을 반환 → **작성자 자동기록을 DB 조회 0회로** 달성. uuid 외부 비노출 원칙은 유지된다(토큰 소지자=본인만 봄, 모든 API는 uuid 사용).
-3. **Redis 토큰 저장소: 컴포넌트 완성 + read만 배선.** `RedisConfig` + `TokenBlacklist`/`RefreshTokenStore`를 read·write 모두 구현하되, G3 필터는 블랙리스트 **확인(read)** 만 호출한다. write(로그인 시 refresh 저장, 로그아웃 시 블랙리스트 등록)는 D4가 같은 컴포넌트를 호출 — 인터페이스를 한 번에 고정한다.
+3. **Redis 토큰 저장소: 컴포넌트 완성 + read만 배선.** `TokenBlacklist`/`RefreshTokenStore`를 read·write 모두 구현하되, G3 필터는 블랙리스트 **확인(read)** 만 호출한다. write(로그인 시 refresh 저장, 로그아웃 시 블랙리스트 등록)는 D4가 같은 컴포넌트를 호출 — 인터페이스를 한 번에 고정한다. 별도 `RedisConfig`는 만들지 않는다(Spring Boot 자동구성으로 `StringRedisTemplate` 제공).
 4. **메서드 거부 매핑(fork 확정).** 메서드 `@PreAuthorize` 거부(`AuthorizationDeniedException`)는 `GlobalExceptionHandler`에 `@ExceptionHandler`를 추가해 403 `ACCESS_DENIED`로 매핑한다(경로 단계 핸들러와 출력 일치).
 5. **CORS 최소 배선 포함.** 이미 정의돼 미사용인 `cors.allowed-origin` 프로퍼티를 `CorsConfigurationSource`로 배선한다(분리 프론트엔드 브라우저 호출 필수). SecurityConfig를 어차피 손대므로 G3에 포함.
 
@@ -40,7 +40,7 @@
 | 경로 인가 | 3분법 선언 | — |
 | 위계 유틸 | `RoleHierarchyValidator` + 단위테스트 | role·member 도메인이 **호출** |
 | 메서드 보안 | `@EnableMethodSecurity` | 도메인이 `@PreAuthorize` 부착 |
-| Redis | `RedisConfig` + 저장소 컴포넌트(read·write 메서드) | refresh **저장**·블랙리스트 **등록** 호출 |
+| Redis | 저장소 컴포넌트(read·write 메서드, `StringRedisTemplate` 직접 주입) | refresh **저장**·블랙리스트 **등록** 호출 |
 | 에러 | `INVALID_TOKEN`/`ACCESS_DENIED` 배선 | `AUTHENTICATION_FAILED`(로그인 자격 불일치) 발생 |
 | 엔드포인트 | **없음** (테스트 전용 컨트롤러로 검증) | `/api/auth/signup·login·refresh·logout` |
 
@@ -51,23 +51,24 @@
 신규 — `global/security/`:
 
 ```
-JwtProperties.java            // @ConfigurationProperties("jwt"): secret, accessExpiry, refreshExpiry (Duration/sec)
+JwtProperties.java            // @ConfigurationProperties("jwt"): secret, accessExpiry, refreshExpiry (초 단위), @Validated + @Positive(만료 값 0/음수 fail-fast)
 JwtTokenProvider.java         // 발급(access·refresh) + 파싱·검증 (jjwt 0.12.x)
 MemberPrincipal.java          // record(Long id, String uuid, String name, int maxPriority) — SecurityContext principal
-JwtAuthenticationFilter.java  // OncePerRequestFilter: 토큰 추출→검증→블랙리스트 read→SecurityContext 세팅
-JwtAuthenticationEntryPoint.java  // 401 INVALID_TOKEN → RFC 7807 (ErrorResponse + ObjectMapper)
-JwtAccessDeniedHandler.java       // 403 ACCESS_DENIED → RFC 7807
+JwtAuthenticationFilter.java  // OncePerRequestFilter: 토큰 추출→검증→jti null 가드→블랙리스트 read→SecurityContext 세팅
+JwtAuthenticationEntryPoint.java  // 401 INVALID_TOKEN → RFC 7807 (ErrorResponse + ObjectMapper, tools.jackson.databind)
+JwtAccessDeniedHandler.java       // 403 ACCESS_DENIED → RFC 7807 (tools.jackson.databind)
 RoleHierarchyValidator.java   // priority 위계 4대 가드 (순수 컴포넌트, BusinessException 던짐)
-SecurityAuditorAware.java     // AuditorAware<Long>: SecurityContext → MemberPrincipal.id (없으면 Optional.empty)
-redis/RedisConfig.java        // RedisTemplate<String,String> / RedisConnectionFactory
+SecurityAuditorAware.java     // AuditorAware<Long>: SecurityContext → MemberPrincipal.id (없으면 Optional.empty). plain class — @Component 없음
 redis/TokenBlacklist.java     // isBlacklisted(jti) [read, G3] / blacklist(jti, expiresAt) [write, D4] — 계약은 아래 "Redis 토큰 저장소 계약"
 redis/RefreshTokenStore.java  // isValid(uuid, jti) [read] / save(uuid, jti, expiresAt)·revoke(uuid, jti)·revokeAll(uuid) [write, D4] — 다중 세션
 ```
 
+`redis/RedisConfig.java` **는 생성하지 않는다.** Spring Boot 자동구성이 `spring.data.redis.*` 설정으로 `StringRedisTemplate`을 제공하므로 별도 config 불필요. `TokenBlacklist`·`RefreshTokenStore`는 `StringRedisTemplate`을 직접 주입받는다.
+
 수정 — 기존 파일:
 
 - `global/config/SecurityConfig.java` — 셸 확장(경로 3분법·필터 등록·엔트리포인트/핸들러·CORS·`@EnableMethodSecurity`).
-- `global/config/JpaConfig.java` — `auditorAwareRef`를 `SecurityAuditorAware`로 교체, 스텁 `@Bean auditorAware()` 제거(주석이 예고한 "본문만 교체").
+- `global/config/JpaConfig.java` — `auditorAwareRef = "securityAuditorAware"`로 교체, 기존 스텁 `@Bean` 제거, 대신 `@Bean securityAuditorAware()` 추가(plain `SecurityAuditorAware` 인스턴스 반환). `@DataJpaTest` 슬라이스는 `@Component`를 스캔하지 않으므로 `@Bean`이 `@Configuration` 안에 있어야 슬라이스가 감사자를 주입받을 수 있다. `@Component` + `@Bean` 중복은 빈 이름 충돌로 기동을 깬다.
 - `global/exception/GlobalExceptionHandler.java` — `@ExceptionHandler(AuthorizationDeniedException.class)` → 403 `ACCESS_DENIED` 추가.
 
 테스트 전용(`src/test`, 기존 `PageTestController`/`ExceptionTestController` 패턴):
@@ -156,7 +157,7 @@ G3이 **키 이름이 아니라 세션 정책·TTL 기준·value schema까지** 
   - `MemberPrincipal`/권한 매핑: permissions→authorities, mid/maxPriority 보존.
 - **슬라이스(MockMvc + Spring Security):** `SecuredTestController`로 `/api/admin/test`·`/api/gallery/test`·`/api/public/test`·`/api/me-like/test` × (토큰 없음/유효 access/권한부족/만료) 조합 → 200/401/403 및 RFC 7807 바디 검증. `TokenBlacklist`는 mock.
 - **통합(@SpringBootTest + `TestcontainersConfiguration`, 실제 Redis 7-alpine):**
-  - `JwtAuthenticationFilter`: 블랙리스트된 jti를 넣고 401 거부 확인. `RedisConfig` 빈 기동 확인.
+  - `JwtAuthenticationFilter`: 블랙리스트된 jti를 넣고 401 거부 확인. `StringRedisTemplate` 자동구성 기동 확인.
   - `TokenBlacklist`(write 포함): `blacklist(jti, expiresAt)` 후 키 생성·존재 확인, 저장된 **TTL이 `expiresAt − now`에 근접**한지, `isBlacklisted`가 true.
   - `RefreshTokenStore`(write 포함): `save→isValid` true, `revoke→isValid` false, `revokeAll`이 같은 uuid의 모든 기기 키 제거, **uuid-jti 불일치 시 `isValid` false**(다른 회원의 jti로 통과 불가).
 - **감사:** `SecurityAuditorAware`가 인증 컨텍스트에서 `mid`를 반환하고, 미인증 시 `Optional.empty()`인지(기존 `BaseEntityAuditingTest`와 정합).
@@ -176,3 +177,27 @@ G3이 **키 이름이 아니라 세션 정책·TTL 기준·value schema까지** 
 5. SecurityConfig가 비대해지면(경로+CORS+빈) 응집 단위로 분리 검토(현 규모는 단일 파일 유지).
 
 > Redis 토큰 저장소의 세션 정책·TTL 기준·value schema는 더 이상 미해결이 아니다 — 위 "Redis 토큰 저장소 계약" 절에서 확정(코드리뷰 G3-1·2·3 반영).
+
+## 구현 반영 (2차 리뷰 후 확정)
+
+구현·코드리뷰 2라운드를 거치며 설계 문서와 코드 사이에 생긴 확정 사항. 이하가 **실제 코드**다.
+
+1. **`RedisConfig` 미생성.** Spring Boot 자동구성이 `StringRedisTemplate`을 제공하므로 `redis/RedisConfig.java`는 만들지 않았다. 산출물 목록에서 제거(위 "산출물" 절에 반영).
+
+2. **`SecurityAuditorAware` plain class + `JpaConfig @Bean`.** `SecurityAuditorAware`에 `@Component` 없음. `JpaConfig` 안의 `@Bean securityAuditorAware()` 메서드가 인스턴스를 생성·등록한다. `@DataJpaTest` 슬라이스가 컴포넌트 스캔을 건너뛰므로 `@Configuration` 소속 `@Bean`이어야 슬라이스에서 감사자가 주입된다. `@Component` + `@Bean` 중복 선언은 이름 충돌로 컨텍스트를 깬다.
+
+3. **`JwtProperties` `@Validated` + `@Positive`.** `accessExpiry`/`refreshExpiry`에 `@Positive` 제약을 두고 `@Validated`로 바인딩 시 검증한다. 0/음수 주입 시 기동 거부(fail-fast). 레코드를 직접 `new`로 생성하는 단위 테스트는 영향을 받지 않는다. `JwtPropertiesValidationTest`(ApplicationContextRunner 기반, 2 tests)로 fail-fast를 실증한다.
+
+4. **`RefreshTokenStore.revokeAll` — SCAN 사용, KEYS 미사용.** `redis.keys(PREFIX + uuid + ":*")` 대신 `ScanOptions` + `Cursor<String>`(커서 기반, 논블로킹)으로 키를 수집한다. Redis keyspace를 캐시·조회수 등과 공유하므로(스펙 §9) `KEYS`는 전체를 블로킹할 수 있다.
+
+5. **`SecurityConfig.corsConfigurationSource()` 와일드카드 원점 거부.** `cors.allowed-origin == "*"`이면 기동 시 `IllegalStateException`을 던진다. credentialed CORS(`allowCredentials=true`)에서 와일드카드 원점은 브라우저·Spring 모두 거부하므로, 모호한 런타임 오류 대신 명확한 fail-fast를 선택했다.
+
+6. **`GlobalExceptionHandler` 익명 판별 3중 조건.** `authentication == null || authentication instanceof AnonymousAuthenticationToken || !authentication.isAuthenticated()` — 세 번째 `!isAuthenticated()` 절을 추가해 `isAuthenticated() == false`인 부분 인증 객체도 익명으로 분류한다.
+
+7. **Jackson 3 — `tools.jackson.databind.ObjectMapper`.** SB4가 Jackson 3(`tools.jackson.*`)을 자동구성하므로 `JwtAuthenticationEntryPoint`, `JwtAccessDeniedHandler`, `SecurityErrorResponses`(및 `SecurityErrorWritersTest`)는 `tools.jackson.databind.ObjectMapper`를 import한다. `@JsonInclude` 등 애너테이션은 기존 `com.fasterxml.jackson.annotation`을 그대로 사용한다.
+
+8. **`@AutoConfigureMockMvc` — SB4 재배치 패키지.** `org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc`를 import한다(`org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc` 아님). `SecurityConfigPathRulesTest`·`SecurityBlacklistE2eTest` 모두 이 패키지를 사용한다.
+
+9. **`JwtAuthenticationFilter` `jti != null` 가드.** 블랙리스트 체크 전 `jti != null` 조건을 추가했다(`claims.getId()` null 방어). 필터 단위 테스트 6개(추가: `expired_token_leaves_context_empty`). authorities 검증은 `.anyMatch(a -> a.getAuthority().equals("SERMON_WRITE"))`를 사용한다.
+
+10. **`SecurityConfigPathRulesTest` 9 tests.** 기존 계획의 7 tests에서 gallery 익명 401 케이스와 me 경로를 두 개의 독립 테스트로 분리해 9개가 됐다. `JwtPropertiesValidationTest` 2 tests.

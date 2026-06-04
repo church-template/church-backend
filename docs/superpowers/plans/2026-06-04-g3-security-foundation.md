@@ -21,6 +21,21 @@
 - **메서드 거부 매핑 정밀화(스펙 결정 #4 보완):** `@ExceptionHandler(AuthorizationDeniedException)`는 **익명이면 401 `INVALID_TOKEN`, 인증됐으나 권한부족이면 403 `ACCESS_DENIED`**로 분기한다. 익명 사용자를 무조건 403으로 떨구지 않기 위함(메서드 보안 `isAuthenticated()` 거부 케이스). 경로 단계 익명 거부는 그대로 EntryPoint(401)가 처리.
 - **포맷팅:** 본 계획의 코드는 로직에 집중했으므로, 각 커밋 전(또는 최소 Task 12 빌드 전) `./gradlew spotlessApply`로 palantirJavaFormat·import 순서·미사용 import를 정리한다(`spotlessCheck`가 `build`에서 강제됨).
 
+## 구현 반영 노트 (코드 = 진실 공급원)
+
+아래 항목은 구현 + 2라운드 코드리뷰를 거쳐 **실제 코드와 계획 사이에 생긴 확정 변경**이다. 계획의 코드 블록은 해당 태스크에서 수정됐다.
+
+1. **`RedisConfig` 미생성** — 설계 노트와 동일. 스펙 산출물 목록에서도 삭제 반영됨.
+2. **`SecurityAuditorAware` plain class, `JpaConfig @Bean`으로 등록.** `@Component` 없음. `JpaConfig` 안의 `@Bean securityAuditorAware()` 메서드가 인스턴스를 생성한다. `@DataJpaTest` 슬라이스는 컴포넌트 스캔을 건너뛰므로 `@Configuration` 소속 `@Bean`이어야 슬라이스에서 주입된다. `@Component` + `@Bean` 이중 선언은 이름 충돌로 컨텍스트를 깬다. (Task 7 코드 블록 수정됨)
+3. **`JwtProperties` `@Validated` + `@Positive`.** `accessExpiry`·`refreshExpiry`에 `@Positive` 제약 추가, 바인딩 시점에 검증. 0/음수 주입 시 기동 거부(fail-fast). 단위 테스트(`new` 직접 생성)에는 영향 없음. `JwtPropertiesValidationTest` 2 tests 추가. (Task 1 코드 블록 수정됨)
+4. **`RefreshTokenStore.revokeAll` SCAN 사용.** `redis.keys(...)` 대신 `ScanOptions` + `Cursor<String>` 커서 기반 SCAN으로 교체. Redis keyspace를 캐시 등과 공유하므로 KEYS의 전체 블로킹을 피한다. (Task 6 코드 블록 수정됨)
+5. **`SecurityConfig.corsConfigurationSource()` 와일드카드 원점 거부.** `cors.allowed-origin == "*"` 이면 `IllegalStateException`으로 기동 거부. credentialed CORS + wildcard origin은 브라우저·Spring 모두 거부하므로 모호한 런타임 오류 대신 명확한 fail-fast 선택. (Task 10 코드 블록 수정됨)
+6. **`GlobalExceptionHandler` 익명 판별 3중 조건.** `authentication == null || authentication instanceof AnonymousAuthenticationToken || !authentication.isAuthenticated()` — `!isAuthenticated()` 절 추가. (Task 10 코드 블록 수정됨)
+7. **Jackson 3 — `tools.jackson.databind.ObjectMapper`.** SB4 자동구성은 Jackson 3을 제공. `SecurityErrorResponses`, `JwtAuthenticationEntryPoint`, `JwtAccessDeniedHandler`, `SecurityErrorWritersTest`는 `tools.jackson.databind.ObjectMapper` import 사용. `@JsonInclude` 등 애너테이션은 `com.fasterxml.jackson.annotation` 유지. (Task 8 코드 블록 수정됨)
+8. **`@AutoConfigureMockMvc` SB4 패키지.** `org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc` (SB4 재배치). `org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc` 아님. Tasks 10·11 코드 블록 수정됨.
+9. **`JwtAuthenticationFilter` `jti != null` 가드 + 6 tests.** `isAccess && jti != null && !tokenBlacklist.isBlacklisted(jti)` — null 방어 추가. 필터 테스트 6개(추가: `expired_token_leaves_context_empty`). authorities 검증: `.anyMatch(a -> a.getAuthority().equals("SERMON_WRITE"))`. (Task 9 코드 블록 수정됨)
+10. **`SecurityConfigPathRulesTest` 9 tests.** gallery 익명 401, me 경로를 각각 독립 테스트로 분리. `JwtPropertiesValidationTest` 2 tests. (Task 10 코드 블록 수정됨)
+
 ## File Structure
 
 신규 — `src/main/java/com/elipair/church/global/security/`:
@@ -106,13 +121,22 @@ Expected: FAIL — `JwtProperties` 클래스 없음(컴파일 에러).
 ```java
 package com.elipair.church.global.security;
 
+import jakarta.validation.constraints.Positive;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * JWT 설정(스펙 §4·§10). 만료값은 초 단위. secret은 HS256용 32바이트(256bit) 이상이어야 한다.
+ *
+ * <p>만료값은 @Positive로 기동 시 검증한다(0/음수 주입 시 발급 토큰이 즉시 만료돼 인증이 전부 깨지는 것을 fail-fast).
+ * 바인딩 시점에만 검증되므로(@Validated) 레코드를 직접 생성하는 단위 테스트에는 영향이 없다.
  */
+@Validated
 @ConfigurationProperties(prefix = "jwt")
-public record JwtProperties(String secret, long accessExpiry, long refreshExpiry) {}
+public record JwtProperties(
+        String secret,
+        @Positive long accessExpiry,
+        @Positive long refreshExpiry) {}
 ```
 
 - [ ] **Step 5: 통과 확인**
@@ -704,7 +728,10 @@ package com.elipair.church.global.security.redis;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -712,6 +739,9 @@ import org.springframework.stereotype.Component;
  * 다중 세션 Refresh 토큰 저장소(G3 설계 "Redis 토큰 저장소 계약").
  * key=auth:refresh:{uuid}:{jti}, value="1", TTL=refresh 남은 수명. 회원·기기별 독립 세션.
  * G3은 read(isValid)만 사용. save/revoke/revokeAll(write)은 D4 로그인·로그아웃이 호출한다.
+ *
+ * <p>revokeAll은 KEYS가 아니라 SCAN(커서 기반, 논블로킹)으로 키를 수집한다. Redis는 캐시·조회수 등과
+ * keyspace를 공유하므로(스펙 §9) KEYS는 전체를 블로킹할 수 있다. SCAN은 그 위험을 피한다.
  */
 @Component
 public class RefreshTokenStore {
@@ -744,10 +774,15 @@ public class RefreshTokenStore {
         redis.delete(key(uuid, jti));
     }
 
-    /** 전체 로그아웃·강제 만료(스펙 §4.1). 교회 규모에서 KEYS 스캔은 수용 가능; 폭증 시 인덱스 셋 도입. */
+    /** 전체 로그아웃·강제 만료(스펙 §4.1). SCAN으로 해당 회원의 세션 키만 수집해 삭제(KEYS 미사용 — 논블로킹). */
     public void revokeAll(String uuid) {
-        Set<String> keys = redis.keys(PREFIX + uuid + ":*");
-        if (keys != null && !keys.isEmpty()) {
+        ScanOptions options =
+                ScanOptions.scanOptions().match(PREFIX + uuid + ":*").count(100).build();
+        List<String> keys = new ArrayList<>();
+        try (Cursor<String> cursor = redis.scan(options)) {
+            cursor.forEachRemaining(keys::add);
+        }
+        if (!keys.isEmpty()) {
             redis.delete(keys);
         }
     }
@@ -827,13 +862,12 @@ import java.util.Optional;
 import org.springframework.data.domain.AuditorAware;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 
 /**
  * BaseEntity의 created_by/updated_by를 채우는 감사자 공급원(스펙 §6, BaseEntity 주석 "#4부터 채움").
  * SecurityContext의 MemberPrincipal.id(=member.id)를 반환 — DB 조회 없음. 미인증이면 Optional.empty().
+ * JpaConfig#securityAuditorAware()로 빈 등록 — 직접 @Component 불필요.
  */
-@Component
 public class SecurityAuditorAware implements AuditorAware<Long> {
 
     @Override
@@ -849,13 +883,15 @@ public class SecurityAuditorAware implements AuditorAware<Long> {
 }
 ```
 
-- [ ] **Step 4: JpaConfig를 컴포넌트 참조로 교체**
+- [ ] **Step 4: JpaConfig를 `@Bean` 등록 방식으로 교체**
 
-`src/main/java/com/elipair/church/global/config/JpaConfig.java` 전체를 다음으로 교체(스텁 `@Bean`·미사용 import 제거):
+`src/main/java/com/elipair/church/global/config/JpaConfig.java` 전체를 다음으로 교체. `@DataJpaTest` 슬라이스는 컴포넌트 스캔을 건너뛰므로 `@Component` 대신 `@Configuration` 소속 `@Bean`으로 등록해야 슬라이스에서 감사자가 주입된다:
 
 ```java
 package com.elipair.church.global.config;
 
+import com.elipair.church.global.security.SecurityAuditorAware;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 
@@ -864,7 +900,13 @@ import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
  */
 @Configuration
 @EnableJpaAuditing(auditorAwareRef = "securityAuditorAware")
-public class JpaConfig {}
+public class JpaConfig {
+
+    @Bean
+    public SecurityAuditorAware securityAuditorAware() {
+        return new SecurityAuditorAware();
+    }
+}
 ```
 
 - [ ] **Step 5: 통과 확인 + 기존 감사 테스트 무회귀**
@@ -896,12 +938,12 @@ package com.elipair.church.global.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import tools.jackson.databind.ObjectMapper;
 
 class SecurityErrorWritersTest {
 
@@ -913,8 +955,7 @@ class SecurityErrorWritersTest {
         request.setRequestURI("/api/admin/sermons");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        new JwtAuthenticationEntryPoint(mapper)
-                .commence(request, response, new BadCredentialsException("x"));
+        new JwtAuthenticationEntryPoint(mapper).commence(request, response, new BadCredentialsException("x"));
 
         assertThat(response.getStatus()).isEqualTo(401);
         assertThat(response.getContentAsString()).contains("\"errorCode\":\"INVALID_TOKEN\"");
@@ -927,8 +968,7 @@ class SecurityErrorWritersTest {
         request.setRequestURI("/api/gallery/albums");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        new JwtAccessDeniedHandler(mapper)
-                .handle(request, response, new AccessDeniedException("x"));
+        new JwtAccessDeniedHandler(mapper).handle(request, response, new AccessDeniedException("x"));
 
         assertThat(response.getStatus()).isEqualTo(403);
         assertThat(response.getContentAsString()).contains("\"errorCode\":\"ACCESS_DENIED\"");
@@ -948,12 +988,12 @@ package com.elipair.church.global.security;
 
 import com.elipair.church.global.exception.ErrorCode;
 import com.elipair.church.global.exception.ErrorResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import org.springframework.http.MediaType;
+import tools.jackson.databind.ObjectMapper;
 
 /** 필터 단계 인증·인가 실패를 G2와 동일한 RFC 7807 봉투로 직렬화하는 공용 헬퍼. */
 final class SecurityErrorResponses {
@@ -976,13 +1016,13 @@ final class SecurityErrorResponses {
 package com.elipair.church.global.security;
 
 import com.elipair.church.global.exception.ErrorCode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.ObjectMapper;
 
 /** 미인증·토큰 문제(없음·만료·위변조·잘못된 type) → 401 INVALID_TOKEN. */
 @Component
@@ -1006,13 +1046,13 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
 package com.elipair.church.global.security;
 
 import com.elipair.church.global.exception.ErrorCode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.ObjectMapper;
 
 /** 인증됐으나 경로 권한 부족 → 403 ACCESS_DENIED. */
 @Component
@@ -1094,7 +1134,8 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void valid_access_token_populates_context() throws Exception {
-        String token = provider.issueAccess(new MemberPrincipal(7L, "uuid-7", "홍길동", 900), "장로", List.of("SERMON_WRITE"));
+        String token =
+                provider.issueAccess(new MemberPrincipal(7L, "uuid-7", "홍길동", 900), "장로", List.of("SERMON_WRITE"));
         FilterChain chain = mock(FilterChain.class);
 
         filter.doFilter(withToken(token), new MockHttpServletResponse(), chain);
@@ -1103,7 +1144,7 @@ class JwtAuthenticationFilterTest {
         assertThat(auth).isNotNull();
         assertThat(auth.getPrincipal()).isInstanceOf(MemberPrincipal.class);
         assertThat(((MemberPrincipal) auth.getPrincipal()).id()).isEqualTo(7L);
-        assertThat(auth.getAuthorities()).contains(new SimpleGrantedAuthority("SERMON_WRITE"));
+        assertThat(auth.getAuthorities()).anyMatch(a -> a.getAuthority().equals("SERMON_WRITE"));
         verify(chain).doFilter(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
@@ -1139,6 +1180,16 @@ class JwtAuthenticationFilterTest {
     @Test
     void no_header_leaves_context_empty() throws Exception {
         filter.doFilter(withToken(null), new MockHttpServletResponse(), mock(FilterChain.class));
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    @Test
+    void expired_token_leaves_context_empty() throws Exception {
+        JwtTokenProvider expiring = new JwtTokenProvider(new JwtProperties(SECRET, -60, 1209600));
+        String token = expiring.issueAccess(new MemberPrincipal(7L, "uuid-7", "n", 0), null, List.of());
+
+        filter.doFilter(withToken(token), new MockHttpServletResponse(), mock(FilterChain.class));
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
@@ -1215,9 +1266,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (token != null) {
             try {
                 Claims claims = tokenProvider.parse(token);
-                boolean isAccess = JwtTokenProvider.TYPE_ACCESS.equals(
-                        claims.get(JwtTokenProvider.CLAIM_TYPE, String.class));
-                if (isAccess && !tokenBlacklist.isBlacklisted(claims.getId())) {
+                String jti = claims.getId();
+                boolean isAccess =
+                        JwtTokenProvider.TYPE_ACCESS.equals(claims.get(JwtTokenProvider.CLAIM_TYPE, String.class));
+                if (isAccess && jti != null && !tokenBlacklist.isBlacklisted(jti)) {
                     SecurityContextHolder.getContext().setAuthentication(toAuthentication(claims));
                 }
             } catch (JwtException | IllegalArgumentException ignored) {
@@ -1255,7 +1307,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 - [ ] **Step 4: 통과 확인**
 
 Run: `./gradlew test --tests 'com.elipair.church.global.security.JwtAuthenticationFilterTest'`
-Expected: PASS (5 tests)
+Expected: PASS (6 tests)
 
 - [ ] **Step 5: 커밋**
 
@@ -1324,8 +1376,8 @@ import com.elipair.church.TestcontainersConfiguration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -1383,9 +1435,21 @@ class SecurityConfigPathRulesTest {
     }
 
     @Test
-    void me_path_requires_authentication_via_method_security() throws Exception {
+    void gallery_path_anonymous_is_401_invalid_token() throws Exception {
+        mockMvc.perform(get("/api/gallery/ping"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_TOKEN"));
+    }
+
+    @Test
+    void me_path_anonymous_is_401() throws Exception {
         mockMvc.perform(get("/api/me/ping")).andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/api/me/ping").header("Authorization", bearer(List.of()))).andExpect(status().isOk());
+    }
+
+    @Test
+    void me_path_authenticated_is_200() throws Exception {
+        mockMvc.perform(get("/api/me/ping").header("Authorization", bearer(List.of())))
+                .andExpect(status().isOk());
     }
 }
 ```
@@ -1414,7 +1478,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
     public ResponseEntity<ErrorResponse> handleAuthorizationDenied(
             AuthorizationDeniedException e, HttpServletRequest request) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        boolean anonymous = authentication == null || authentication instanceof AnonymousAuthenticationToken;
+        boolean anonymous = authentication == null
+                || authentication instanceof AnonymousAuthenticationToken
+                || !authentication.isAuthenticated();
         ErrorCode code = anonymous ? ErrorCode.INVALID_TOKEN : ErrorCode.ACCESS_DENIED;
         return ResponseEntity.status(code.getStatus()).body(ErrorResponse.of(code, request.getRequestURI()));
     }
@@ -1505,6 +1571,12 @@ public class SecurityConfig {
     }
 
     private CorsConfigurationSource corsConfigurationSource() {
+        // allowCredentials(true)는 와일드카드 origin과 공존할 수 없다(브라우저·Spring 모두 거부).
+        // 운영자가 CORS_ALLOWED_ORIGIN=*로 잘못 넣으면 모호한 런타임 오류 대신 기동 시 명확히 실패시킨다.
+        if ("*".equals(corsAllowedOrigin)) {
+            throw new IllegalStateException(
+                    "cors.allowed-origin은 '*'일 수 없습니다(credentialed CORS). CORS_ALLOWED_ORIGIN에 교회 프론트 도메인을 지정하세요.");
+        }
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(corsAllowedOrigin));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
@@ -1520,7 +1592,7 @@ public class SecurityConfig {
 - [ ] **Step 6: 통과 확인**
 
 Run: `./gradlew test --tests 'com.elipair.church.global.security.SecurityConfigPathRulesTest'`
-Expected: PASS. 분기 책임: **경로 단계** 거부(admin 익명·gallery 권한부족)는 EntryPoint(401)/AccessDeniedHandler(403)가, **메서드 단계** 거부(`@PreAuthorize`)는 Step 4의 `@ExceptionHandler`가 익명→401·인증→403으로 처리한다. 만약 메서드 거부가 500이 되면 spec 미해결 #2(전파 경로) 재확인 — 단 `@ExceptionHandler(AuthorizationDeniedException)`가 DispatcherServlet 단계에서 잡으므로 정상 동작해야 한다.
+Expected: PASS (9 tests). 분기 책임: **경로 단계** 거부(admin 익명·gallery 권한부족·gallery 익명)는 EntryPoint(401)/AccessDeniedHandler(403)가, **메서드 단계** 거부(`@PreAuthorize`)는 Step 4의 `@ExceptionHandler`가 익명→401·인증→403으로 처리한다. 만약 메서드 거부가 500이 되면 spec 미해결 #2(전파 경로) 재확인 — 단 `@ExceptionHandler(AuthorizationDeniedException)`가 DispatcherServlet 단계에서 잡으므로 정상 동작해야 한다.
 
 - [ ] **Step 7: 커밋**
 
@@ -1551,8 +1623,8 @@ import io.jsonwebtoken.Claims;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 

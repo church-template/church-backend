@@ -74,4 +74,4 @@ This repo is wired to the SUH-DevOps template. **`version.yml` is the version so
 
 ## Commit convention
 
-`<type>: <description>` (types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`). Commit in Korean to match history. Commit/push only when asked.
+`<type> : <description>` — 콜론 앞 공백은 저장소 히스토리 관행이다 (types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`). Commit in Korean to match history. Commit/push only when asked.

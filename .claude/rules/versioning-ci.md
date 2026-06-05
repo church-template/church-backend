@@ -23,4 +23,4 @@ This repo is wired to the SUH-DevOps template. Version and changelog files are *
 
 ## Commits
 
-`<type>: <description>` (feat/fix/refactor/docs/test/chore/perf/ci), in Korean to match history. Commit/push only when asked.
+`<type> : <description>` (콜론 앞 공백은 저장소 히스토리 관행; feat/fix/refactor/docs/test/chore/perf/ci), in Korean to match history. Commit/push only when asked.

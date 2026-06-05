@@ -3,10 +3,11 @@ package com.elipair.church.domain.tag;
 import com.elipair.church.domain.tag.dto.TagResponse;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +30,10 @@ public class ContentTagService {
         this.contentTagRepository = contentTagRepository;
     }
 
-    /** 콘텐츠 생성·수정 시 호출. tagIds 전량 교체(dedup, null/빈 리스트면 전부 해제). */
+    /**
+     * 콘텐츠 생성·수정 시 호출. tagIds 전량 교체(dedup, null/빈 리스트면 전부 해제).
+     * 동시 호출 정합성은 호출자가 리소스 엔티티에 건 낙관적 락(@Version)이 보장한다(동시 교체는 한쪽이 409로 실패).
+     */
     @Transactional
     public void replaceLinks(ContentResourceType type, Long resourceId, List<Long> tagIds) {
         List<Long> distinct =
@@ -50,16 +54,19 @@ public class ContentTagService {
         return contentTagRepository.findTagsByResource(type, resourceId);
     }
 
-    /** 콘텐츠 목록 응답용 — N+1 회피 배치 조회(행을 resourceId로 그룹핑). */
+    /** 콘텐츠 목록 응답용 — N+1 회피 배치 조회. 요청한 모든 resourceId를 키로 갖는 완전한 맵을 돌려준다(태그 없는 리소스는 빈 리스트). */
     public Map<Long, List<TagResponse>> getTagsByResources(ContentResourceType type, Collection<Long> resourceIds) {
         if (resourceIds == null || resourceIds.isEmpty()) {
             return Map.of();
         }
-        return contentTagRepository.findTagRowsByResources(type, resourceIds).stream()
-                .collect(Collectors.groupingBy(
-                        ResourceTagRow::getResourceId,
-                        Collectors.mapping(
-                                row -> new TagResponse(row.getTagId(), row.getTagName()), Collectors.toList())));
+        Map<Long, List<TagResponse>> result = new LinkedHashMap<>();
+        for (Long resourceId : resourceIds) {
+            result.putIfAbsent(resourceId, new ArrayList<>());
+        }
+        for (ResourceTagRow row : contentTagRepository.findTagRowsByResources(type, resourceIds)) {
+            result.get(row.getResourceId()).add(new TagResponse(row.getTagId(), row.getTagName()));
+        }
+        return result;
     }
 
     /** 콘텐츠 soft-delete 시 연결 정리. */

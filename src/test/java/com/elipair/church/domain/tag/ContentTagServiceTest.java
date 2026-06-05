@@ -130,4 +130,29 @@ class ContentTagServiceTest {
 
         assertThat(contentTagRepository.count()).isZero();
     }
+
+    @Test
+    void getTagsByResources_returns_empty_list_for_resource_without_tags() {
+        Long worship = tag("예배");
+        contentTagService.replaceLinks(ContentResourceType.SERMON, 1L, List.of(worship));
+
+        Map<Long, List<TagResponse>> map =
+                contentTagService.getTagsByResources(ContentResourceType.SERMON, List.of(1L, 99L));
+
+        assertThat(map.get(1L)).extracting(TagResponse::name).containsExactly("예배");
+        assertThat(map.get(99L)).isNotNull().isEmpty(); // 태그 없는 리소스도 키가 존재, null 아님
+    }
+
+    @Test
+    void replaceLinks_null_tag_element_is_400() {
+        Long worship = tag("예배");
+        java.util.List<Long> withNull = new java.util.ArrayList<>();
+        withNull.add(worship);
+        withNull.add(null);
+
+        assertThatThrownBy(() -> contentTagService.replaceLinks(ContentResourceType.SERMON, 100L, withNull))
+                .isInstanceOf(com.elipair.church.global.exception.BusinessException.class)
+                .extracting(e -> ((com.elipair.church.global.exception.BusinessException) e).getErrorCode())
+                .isEqualTo(com.elipair.church.global.exception.ErrorCode.INVALID_INPUT_VALUE);
+    }
 }

@@ -9,6 +9,7 @@ import com.elipair.church.domain.member.Member;
 import com.elipair.church.domain.member.MemberRepository;
 import com.elipair.church.domain.role.Role;
 import com.elipair.church.domain.role.RoleRepository;
+import com.elipair.church.global.security.JwtTokenProvider;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,7 @@ class AuthApiTest {
     @Autowired private RoleRepository roleRepository;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private ObjectMapper objectMapper;
+    @Autowired private JwtTokenProvider provider;
 
     @AfterEach
     void cleanup() {
@@ -87,5 +89,62 @@ class AuthApiTest {
                                 + "\"termsAgreed\":true,\"privacyAgreed\":true}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    /** BCrypt 비번으로 활성 회원 생성 후 저장. roleName이 null이면 역할 없음. */
+    private Member persistMember(String phone, String rawPassword, String roleName) {
+        Member m = Member.create(phone, "홍길동", passwordEncoder.encode(rawPassword), null, null, true, true);
+        if (roleName != null) {
+            m.grantRole(role(roleName));
+        }
+        return memberRepository.saveAndFlush(m);
+    }
+
+    @Test
+    void login_success_returns_tokens_and_member() throws Exception {
+        persistMember("01012345678", "password123", "USER");
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"010-1234-5678\",\"password\":\"password123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tokens.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.tokens.refreshToken").isNotEmpty())
+                .andExpect(jsonPath("$.member.phone").value("01012345678"))
+                .andExpect(jsonPath("$.member.roles[0]").value("USER"))
+                .andExpect(jsonPath("$.requiresAgreement").value(false));
+    }
+
+    @Test
+    void login_wrong_password_is_401() throws Exception {
+        persistMember("01012345678", "password123", "USER");
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"010-1234-5678\",\"password\":\"wrongpass\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("AUTHENTICATION_FAILED"));
+    }
+
+    @Test
+    void login_unknown_phone_is_same_401() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"010-0000-0000\",\"password\":\"password123\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("AUTHENTICATION_FAILED"));
+    }
+
+    @Test
+    void login_with_reset_agreement_requires_agreement() throws Exception {
+        Member m = persistMember("01012345678", "password123", "USER");
+        m.resetAgreement("terms"); // 약관 개정 시뮬레이션 → termsAgreed=false
+        memberRepository.saveAndFlush(m);
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"010-1234-5678\",\"password\":\"password123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requiresAgreement").value(true));
     }
 }

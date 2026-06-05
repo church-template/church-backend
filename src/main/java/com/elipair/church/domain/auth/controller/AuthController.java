@@ -1,6 +1,8 @@
 package com.elipair.church.domain.auth.controller;
 
 import com.elipair.church.domain.auth.AuthService;
+import com.elipair.church.domain.auth.dto.LoginRequest;
+import com.elipair.church.domain.auth.dto.LoginResponse;
 import com.elipair.church.domain.auth.dto.SignupRequest;
 import com.elipair.church.domain.auth.dto.SignupResponse;
 import jakarta.validation.Valid;
@@ -26,5 +28,10 @@ public class AuthController {
     @ResponseStatus(HttpStatus.CREATED)
     public SignupResponse signup(@Valid @RequestBody SignupRequest request) {
         return authService.signup(request);
+    }
+
+    @PostMapping("/login")
+    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
+        return authService.login(request);
     }
 }

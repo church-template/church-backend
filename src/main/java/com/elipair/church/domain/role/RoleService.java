@@ -54,6 +54,8 @@ public class RoleService {
         try {
             roleRepository.delete(role);
             roleRepository.flush(); // member_roles FK RESTRICT 위반을 지금 터뜨려 친절한 409로 번역.
+            // NOTE: roles를 참조하는 RESTRICT FK는 member_roles뿐이라(role_permissions는 CASCADE) 여기서 잡히는
+            //       무결성 위반은 곧 "할당된 역할"이다. roles에 다른 제약(CHECK·추가 FK 등) 추가 시 이 분기를 재검토할 것.
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.ROLE_IN_USE);
         }

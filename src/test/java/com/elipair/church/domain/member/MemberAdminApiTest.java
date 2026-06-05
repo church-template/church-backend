@@ -41,11 +41,15 @@ class MemberAdminApiTest {
     private String memberManager() {
         return "Bearer "
                 + provider.issueAccess(
-                        new MemberPrincipal(9L, "uuid-admin", "관리자", 900), null, List.of("MEMBER_MANAGE"));
+                        new MemberPrincipal(9L, java.util.UUID.randomUUID().toString(), "관리자", 900),
+                        null,
+                        List.of("MEMBER_MANAGE"));
     }
 
     private String plainUser() {
-        return "Bearer " + provider.issueAccess(new MemberPrincipal(8L, "uuid-user", "사용자", 0), null, List.of());
+        return "Bearer "
+                + provider.issueAccess(
+                        new MemberPrincipal(8L, java.util.UUID.randomUUID().toString(), "사용자", 0), null, List.of());
     }
 
     private Member persist(String phone, String name) {

@@ -58,6 +58,6 @@ public class SuperAdminInitializer implements ApplicationRunner {
                 true);
         admin.grantRole(superAdmin);
         memberRepository.save(admin);
-        log.info("최초 SUPER_ADMIN 계정을 생성했습니다(phone={}).", admin.getPhone());
+        log.info("최초 SUPER_ADMIN 계정을 생성했습니다."); // 전화번호 등 PII는 로그에 남기지 않는다.
     }
 }

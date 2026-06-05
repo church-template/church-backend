@@ -52,7 +52,8 @@ class MemberRoleApiTest {
     private String roleManager(long requesterId, int maxPriority) {
         return "Bearer "
                 + provider.issueAccess(
-                        new MemberPrincipal(requesterId, "uuid-admin", "관리자", maxPriority),
+                        new MemberPrincipal(
+                                requesterId, java.util.UUID.randomUUID().toString(), "관리자", maxPriority),
                         null,
                         List.of("ROLE_MANAGE"));
     }

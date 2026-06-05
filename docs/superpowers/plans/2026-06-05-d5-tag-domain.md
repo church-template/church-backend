@@ -1458,4 +1458,3 @@ Expected: 라인 커버리지 80% 이상. 부족하면 누락 분기(예: `updat
 **2. Placeholder scan:** TBD/TODO/"적절히 처리" 없음. 모든 코드·명령·기대값 명시 ✓
 
 **3. Type consistency:** `ContentResourceType`, `ContentTagId(Long,ContentResourceType,Long)`, `ContentTag(ContentTagId)`, `TagResponse(Long,String)`, `ResourceTagRow.get{ResourceId,TagId,TagName}`, 리포지토리 메서드명(`deleteByTag`/`deleteByResource`/`findTagsByResource`/`findTagRowsByResources`/`findResourceIdsByTag`)·서비스 메서드명이 Task 3·5·6 전반에서 일치 ✓. `MemberPrincipal(Long,String,String,int)`·`provider.issueAccess(principal,null,List)`는 기존 `PositionApiTest`와 동일 시그니처 ✓
-```

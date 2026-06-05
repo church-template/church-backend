@@ -179,7 +179,7 @@ public class ContentTagService {
 - **`TagApiTest`** (Testcontainers) — 공개 GET, 관리자 CRUD authz(익명 401·권한부족 403), 중복 409, 미존재 404, 검증 400.
 
 ## 9. 산출 파일
-```
+```text
 src/main/resources/db/migration/V4__create_tags.sql      (신규)
 domain/tag/Tag.java                                       (신규)
 domain/tag/ContentTag.java                                (신규)

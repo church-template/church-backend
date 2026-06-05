@@ -5,7 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.elipair.church.domain.auth.dto.LoginRequest;
@@ -21,8 +24,10 @@ import com.elipair.church.domain.role.RoleRepository;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import com.elipair.church.global.security.JwtTokenProvider;
+import com.elipair.church.global.security.MemberPrincipal;
 import com.elipair.church.global.security.redis.RefreshTokenStore;
 import com.elipair.church.global.security.redis.TokenBlacklist;
+import java.util.Date;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -137,5 +142,41 @@ class AuthServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.INVALID_TOKEN);
+    }
+
+    @Test
+    void logout_blacklists_access_and_revokes_owned_refresh() {
+        Claims access = mock(Claims.class);
+        when(tokenProvider.parse("access-tok")).thenReturn(access);
+        when(access.getId()).thenReturn("ajti");
+        when(access.getExpiration()).thenReturn(new Date(System.currentTimeMillis() + 60_000));
+        Claims refresh = mock(Claims.class);
+        when(tokenProvider.parse("refresh-tok")).thenReturn(refresh);
+        when(refresh.get(JwtTokenProvider.CLAIM_TYPE, String.class)).thenReturn("refresh");
+        when(refresh.getSubject()).thenReturn("uuid-1");
+        when(refresh.getId()).thenReturn("rjti");
+
+        authService.logout(new MemberPrincipal(1L, "uuid-1", "n", 100), "access-tok", "refresh-tok");
+
+        verify(tokenBlacklist).blacklist(eq("ajti"), any());
+        verify(refreshTokenStore).revoke("uuid-1", "rjti");
+    }
+
+    @Test
+    void logout_skips_revoke_for_other_users_refresh() {
+        Claims access = mock(Claims.class);
+        when(tokenProvider.parse("access-tok")).thenReturn(access);
+        when(access.getId()).thenReturn("ajti");
+        when(access.getExpiration()).thenReturn(new Date(System.currentTimeMillis() + 60_000));
+        Claims refresh = mock(Claims.class);
+        when(tokenProvider.parse("other-tok")).thenReturn(refresh);
+        when(refresh.get(JwtTokenProvider.CLAIM_TYPE, String.class)).thenReturn("refresh");
+        when(refresh.getSubject()).thenReturn("uuid-OTHER");
+        lenient().when(refresh.getId()).thenReturn("rjti"); // 소유자 불일치가 유일한 차단 사유임을 격리(조건 재배열에도 견고)
+
+        authService.logout(new MemberPrincipal(1L, "uuid-1", "n", 100), "access-tok", "other-tok");
+
+        verify(tokenBlacklist).blacklist(eq("ajti"), any());
+        verify(refreshTokenStore, never()).revoke(any(), any());
     }
 }

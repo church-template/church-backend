@@ -132,6 +132,37 @@ public class AuthService {
         return new RefreshResponse(new TokenPair(access, request.refreshToken()));
     }
 
+    public void logout(MemberPrincipal principal, String accessToken, String refreshToken) {
+        blacklistAccess(accessToken);
+        revokeRefreshIfOwned(principal.uuid(), refreshToken);
+    }
+
+    /** 현재 access 토큰을 jti·남은 수명으로 블랙리스트. 필터가 이미 검증했으므로 방어적 skip만. */
+    private void blacklistAccess(String accessToken) {
+        try {
+            Claims claims = tokenProvider.parse(accessToken);
+            if (claims.getId() != null) {
+                tokenBlacklist.blacklist(claims.getId(), claims.getExpiration().toInstant());
+            }
+        } catch (JwtException | IllegalArgumentException ignored) {
+            // 도달 드묾(필터 통과 토큰) — 방어적 무시
+        }
+    }
+
+    /** 본인 소유 refresh일 때만 revoke. 무효/타인 토큰은 skip(멱등 로그아웃 — INVALID_TOKEN 던지지 않음). */
+    private void revokeRefreshIfOwned(String requesterUuid, String refreshToken) {
+        try {
+            Claims claims = tokenProvider.parse(refreshToken);
+            boolean isRefresh =
+                    JwtTokenProvider.TYPE_REFRESH.equals(claims.get(JwtTokenProvider.CLAIM_TYPE, String.class));
+            if (isRefresh && requesterUuid.equals(claims.getSubject()) && claims.getId() != null) {
+                refreshTokenStore.revoke(requesterUuid, claims.getId());
+            }
+        } catch (JwtException | IllegalArgumentException ignored) {
+            // 무효 refresh — skip
+        }
+    }
+
     /** 토큰 파싱 실패(만료·위변조·형식)를 INVALID_TOKEN으로 변환. 핸들러에 JwtException 핸들러가 없어 미변환 시 500. */
     private Claims parseToken(String token) {
         try {

@@ -126,8 +126,14 @@ public class AuthService {
         if (uuid == null || jti == null || !refreshTokenStore.isValid(uuid, jti)) {
             throw new BusinessException(ErrorCode.INVALID_TOKEN); // revoke·만료·미등록
         }
+        UUID memberUuid;
+        try {
+            memberUuid = UUID.fromString(uuid);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN); // sub가 UUID 형식이 아님 → 500 누수 방지
+        }
         Member member = memberRepository
-                .findByUuidAndDeletedAtIsNull(UUID.fromString(uuid))
+                .findByUuidAndDeletedAtIsNull(memberUuid)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_TOKEN)); // 탈퇴 회원
         // Access만 재발급 — DB에서 권한 재조회(스펙 §4.1), refresh는 그대로 echo
         String access = tokenProvider.issueAccess(

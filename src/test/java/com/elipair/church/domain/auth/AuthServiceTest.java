@@ -157,6 +157,21 @@ class AuthServiceTest {
     }
 
     @Test
+    void refresh_non_uuid_subject_is_invalid_token() {
+        Claims claims = mock(Claims.class);
+        when(tokenProvider.parse("tok")).thenReturn(claims);
+        when(claims.get(JwtTokenProvider.CLAIM_TYPE, String.class)).thenReturn("refresh");
+        when(claims.getSubject()).thenReturn("not-a-uuid");
+        when(claims.getId()).thenReturn("jti-1");
+        when(refreshTokenStore.isValid("not-a-uuid", "jti-1")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("tok")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_TOKEN); // UUID 형식 아님 → 500 아니라 401
+    }
+
+    @Test
     void logout_blacklists_access_and_revokes_owned_refresh() {
         Claims access = mock(Claims.class);
         when(tokenProvider.parse("access-tok")).thenReturn(access);

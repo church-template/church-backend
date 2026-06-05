@@ -3,9 +3,12 @@ package com.elipair.church.domain.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.elipair.church.domain.auth.dto.LoginRequest;
 import com.elipair.church.domain.auth.dto.SignupRequest;
 import com.elipair.church.domain.auth.dto.SignupResponse;
 import com.elipair.church.domain.member.Member;
@@ -72,5 +75,27 @@ class AuthServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    @Test
+    void login_unknown_phone_is_authentication_failed() {
+        when(memberRepository.findByPhoneAndDeletedAtIsNull("01012345678")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("010-1234-5678", "pw")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AUTHENTICATION_FAILED);
+    }
+
+    @Test
+    void login_wrong_password_is_authentication_failed() {
+        Member m = Member.create("01012345678", "홍길동", "{enc}", null, null, true, true);
+        when(memberRepository.findByPhoneAndDeletedAtIsNull("01012345678")).thenReturn(Optional.of(m));
+        when(passwordEncoder.matches(eq("pw"), anyString())).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("010-1234-5678", "pw")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.AUTHENTICATION_FAILED); // 미존재와 동일 코드 — 열거 방지
     }
 }

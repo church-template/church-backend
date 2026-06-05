@@ -3,9 +3,13 @@ package com.elipair.church.domain.auth;
 import com.elipair.church.domain.auth.dto.LoginRequest;
 import com.elipair.church.domain.auth.dto.LoginResponse;
 import com.elipair.church.domain.auth.dto.MemberSummary;
+import com.elipair.church.domain.auth.dto.RefreshRequest;
+import com.elipair.church.domain.auth.dto.RefreshResponse;
 import com.elipair.church.domain.auth.dto.SignupRequest;
 import com.elipair.church.domain.auth.dto.SignupResponse;
 import com.elipair.church.domain.auth.dto.TokenPair;
+import io.jsonwebtoken.JwtException;
+import java.util.UUID;
 import com.elipair.church.domain.member.Member;
 import com.elipair.church.domain.member.MemberAuthorities;
 import com.elipair.church.domain.member.MemberRepository;
@@ -107,5 +111,33 @@ public class AuthService {
 
     private String positionOf(Member m) {
         return m.getPosition() == null ? null : m.getPosition().getName();
+    }
+
+    public RefreshResponse refresh(RefreshRequest request) {
+        Claims claims = parseToken(request.refreshToken());
+        if (!JwtTokenProvider.TYPE_REFRESH.equals(claims.get(JwtTokenProvider.CLAIM_TYPE, String.class))) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+        String uuid = claims.getSubject();
+        String jti = claims.getId();
+        if (uuid == null || jti == null || !refreshTokenStore.isValid(uuid, jti)) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN); // revoke·만료·미등록
+        }
+        Member member = memberRepository
+                .findByUuidAndDeletedAtIsNull(UUID.fromString(uuid))
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_TOKEN)); // 탈퇴 회원
+        // Access만 재발급 — DB에서 권한 재조회(스펙 §4.1), refresh는 그대로 echo
+        String access = tokenProvider.issueAccess(principalOf(member), positionOf(member),
+                MemberAuthorities.permissions(member));
+        return new RefreshResponse(new TokenPair(access, request.refreshToken()));
+    }
+
+    /** 토큰 파싱 실패(만료·위변조·형식)를 INVALID_TOKEN으로 변환. 핸들러에 JwtException 핸들러가 없어 미변환 시 500. */
+    private Claims parseToken(String token) {
+        try {
+            return tokenProvider.parse(token);
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
     }
 }

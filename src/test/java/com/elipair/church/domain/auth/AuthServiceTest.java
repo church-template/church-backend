@@ -9,8 +9,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.elipair.church.domain.auth.dto.LoginRequest;
+import com.elipair.church.domain.auth.dto.RefreshRequest;
 import com.elipair.church.domain.auth.dto.SignupRequest;
 import com.elipair.church.domain.auth.dto.SignupResponse;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.MalformedJwtException;
 import com.elipair.church.domain.member.Member;
 import com.elipair.church.domain.member.MemberRepository;
 import com.elipair.church.domain.role.Role;
@@ -97,5 +100,42 @@ class AuthServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.AUTHENTICATION_FAILED); // 미존재와 동일 코드 — 열거 방지
+    }
+
+    @Test
+    void refresh_parse_failure_is_invalid_token() {
+        when(tokenProvider.parse("bad")).thenThrow(new MalformedJwtException("bad"));
+
+        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("bad")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_TOKEN); // 500이 아니라 401
+    }
+
+    @Test
+    void refresh_access_type_token_is_invalid_token() {
+        Claims claims = mock(Claims.class);
+        when(tokenProvider.parse("tok")).thenReturn(claims);
+        when(claims.get(JwtTokenProvider.CLAIM_TYPE, String.class)).thenReturn("access");
+
+        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("tok")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_TOKEN);
+    }
+
+    @Test
+    void refresh_revoked_token_is_invalid_token() {
+        Claims claims = mock(Claims.class);
+        when(tokenProvider.parse("tok")).thenReturn(claims);
+        when(claims.get(JwtTokenProvider.CLAIM_TYPE, String.class)).thenReturn("refresh");
+        when(claims.getSubject()).thenReturn("uuid-1");
+        when(claims.getId()).thenReturn("jti-1");
+        when(refreshTokenStore.isValid("uuid-1", "jti-1")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("tok")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_TOKEN);
     }
 }

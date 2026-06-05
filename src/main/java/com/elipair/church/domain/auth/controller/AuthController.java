@@ -3,6 +3,8 @@ package com.elipair.church.domain.auth.controller;
 import com.elipair.church.domain.auth.AuthService;
 import com.elipair.church.domain.auth.dto.LoginRequest;
 import com.elipair.church.domain.auth.dto.LoginResponse;
+import com.elipair.church.domain.auth.dto.RefreshRequest;
+import com.elipair.church.domain.auth.dto.RefreshResponse;
 import com.elipair.church.domain.auth.dto.SignupRequest;
 import com.elipair.church.domain.auth.dto.SignupResponse;
 import jakarta.validation.Valid;
@@ -33,5 +35,10 @@ public class AuthController {
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/refresh")
+    public RefreshResponse refresh(@Valid @RequestBody RefreshRequest request) {
+        return authService.refresh(request);
     }
 }

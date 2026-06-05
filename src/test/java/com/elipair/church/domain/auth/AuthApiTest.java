@@ -10,7 +10,9 @@ import com.elipair.church.domain.member.MemberRepository;
 import com.elipair.church.domain.role.Role;
 import com.elipair.church.domain.role.RoleRepository;
 import com.elipair.church.global.security.JwtTokenProvider;
+import io.jsonwebtoken.Claims;
 import tools.jackson.databind.ObjectMapper;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -146,5 +148,60 @@ class AuthApiTest {
                         .content("{\"phone\":\"010-1234-5678\",\"password\":\"password123\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.requiresAgreement").value(true));
+    }
+
+    private String loginAndReadToken(String phone, String rawPassword, String field) throws Exception {
+        String body = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"" + phone + "\",\"password\":\"" + rawPassword + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).path("tokens").path(field).asText();
+    }
+
+    @Test
+    void refresh_reissues_access_and_reflects_new_permission() throws Exception {
+        Member m = persistMember("01012345678", "password123", "USER"); // USER = 권한 없음
+        String refresh = loginAndReadToken("010-1234-5678", "password123", "refreshToken");
+
+        // login 이후 MEMBER 역할 부여 → GALLERY_VIEW 생김
+        Member managed = memberRepository.findByIdAndDeletedAtIsNull(m.getId()).orElseThrow();
+        managed.grantRole(role("MEMBER"));
+        memberRepository.saveAndFlush(managed);
+
+        String body = mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refresh + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tokens.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.tokens.refreshToken").value(refresh)) // refresh echo
+                .andReturn().getResponse().getContentAsString();
+
+        String newAccess = objectMapper.readTree(body).path("tokens").path("accessToken").asText();
+        Claims claims = provider.parse(newAccess);
+        @SuppressWarnings("unchecked")
+        List<String> permissions = claims.get(JwtTokenProvider.CLAIM_PERMISSIONS, List.class);
+        org.assertj.core.api.Assertions.assertThat(permissions).contains("GALLERY_VIEW");
+    }
+
+    @Test
+    void refresh_invalid_token_is_401() throws Exception {
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"not-a-jwt\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_TOKEN"));
+    }
+
+    @Test
+    void refresh_with_access_token_is_401() throws Exception {
+        persistMember("01012345678", "password123", "USER");
+        String access = loginAndReadToken("010-1234-5678", "password123", "accessToken");
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + access + "\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_TOKEN")); // type=access 거부
     }
 }

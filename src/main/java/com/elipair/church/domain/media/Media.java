@@ -28,7 +28,7 @@ public class Media extends BaseTimeEntity {
     @Column(nullable = false)
     private String filename;
 
-    @Column(name = "stored_path", nullable = false)
+    @Column(name = "stored_path", nullable = false, unique = true)
     private String storedPath;
 
     @Column(name = "mime_type", nullable = false)

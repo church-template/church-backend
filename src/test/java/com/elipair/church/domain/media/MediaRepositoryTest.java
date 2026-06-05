@@ -1,6 +1,7 @@
 package com.elipair.church.domain.media;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.elipair.church.TestcontainersConfiguration;
 import com.elipair.church.global.config.JpaConfig;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.TestPropertySource;
@@ -36,6 +38,15 @@ class MediaRepositoryTest {
         Media saved = repository.saveAndFlush(image("a.jpg"));
         assertThat(saved.getCreatedAt()).isNotNull();
         assertThat(saved.getId()).isNotNull();
+    }
+
+    @Test
+    void duplicate_stored_path_violates_unique_constraint() {
+        repository.saveAndFlush(Media.create("a.jpg", "2026/06/same.jpg", "image/jpeg", 100L, 1L));
+
+        assertThatThrownBy(() ->
+                        repository.saveAndFlush(Media.create("b.jpg", "2026/06/same.jpg", "image/jpeg", 200L, 1L)))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

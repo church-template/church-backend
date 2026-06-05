@@ -52,9 +52,19 @@ public class MediaService {
     public MediaResponse upload(MultipartFile file, Long uploaderId) {
         String mimeType = detectMime(file); // 헤더 위조 무력화: 저장 mime_type은 스니핑 결과
         String storedPath = fileStorage.store(file);
-        String filename = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "upload";
-        Media media = repository.save(Media.create(filename, storedPath, mimeType, file.getSize(), uploaderId));
-        return MediaResponse.from(media);
+        try {
+            String filename = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "upload";
+            Media media = repository.save(Media.create(filename, storedPath, mimeType, file.getSize(), uploaderId));
+            return MediaResponse.from(media);
+        } catch (RuntimeException e) {
+            // DB 저장 실패 시 방금 쓴 파일을 best-effort 정리 — 레코드 없는 고아 파일은 차단삭제로도 못 지우는 진짜 누수.
+            try {
+                fileStorage.delete(storedPath);
+            } catch (RuntimeException cleanupFailure) {
+                e.addSuppressed(cleanupFailure);
+            }
+            throw e;
+        }
     }
 
     public Page<MediaResponse> list(String type, LocalDate from, LocalDate to, Pageable pageable) {

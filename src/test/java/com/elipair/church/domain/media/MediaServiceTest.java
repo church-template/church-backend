@@ -22,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -63,6 +64,19 @@ class MediaServiceTest {
         assertThat(saved.getUploadedBy()).isEqualTo(7L);
         assertThat(saved.getSize()).isEqualTo(jpeg.length);
         assertThat(res.mimeType()).isEqualTo("image/jpeg");
+    }
+
+    @Test
+    void upload_cleans_up_file_when_db_save_fails() {
+        byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 1, 2, 3, 4};
+        MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", jpeg);
+        when(fileStorage.store(file)).thenReturn("2026/06/x.jpg");
+        when(repository.save(any(Media.class))).thenThrow(new DataIntegrityViolationException("boom"));
+
+        assertThatThrownBy(() -> service(List.of()).upload(file, 1L))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        verify(fileStorage).delete("2026/06/x.jpg"); // 고아 파일 best-effort 정리
     }
 
     @Test

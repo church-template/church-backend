@@ -16,6 +16,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -57,7 +59,7 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth.requestMatchers(
-                                "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
+                                "/v3/api-docs", "/v3/api-docs/**", "/docs/swagger-ui/**", "/docs/swagger-ui.html")
                         .permitAll()
                         .requestMatchers("/error")
                         .permitAll()
@@ -75,6 +77,12 @@ public class SecurityConfig {
                         new JwtAuthenticationFilter(tokenProvider, tokenBlacklist),
                         UsernamePasswordAuthenticationFilter.class);
         return http.build();
+    }
+
+    /** 회원 비밀번호 해시(스펙 §4.1, 복잡도 강제 없음·BCrypt). reset-password·비번변경·부트스트랩·D4 login이 사용. */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
     private CorsConfigurationSource corsConfigurationSource() {

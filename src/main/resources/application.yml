@@ -20,6 +20,12 @@ spring:
       host: ${REDIS_HOST:redis}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD}
+  servlet:
+    multipart:
+      # FileStorage가 FILE_MAX_SIZE를 권위 한도로 검증한다. 서블릿 한도도 같은 값으로 맞춰,
+      # 초과 업로드는 MaxUploadSizeExceededException → 413 FILE_SIZE_EXCEEDED로 통일한다(GlobalExceptionHandler).
+      max-file-size: ${FILE_MAX_SIZE:10485760}
+      max-request-size: ${FILE_MAX_SIZE:10485760}
 
 springdoc:
   api-docs:

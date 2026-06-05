@@ -91,7 +91,7 @@
 ### 3.4 `POST /api/auth/logout` (인증) → `204 No Content` — **현재 기기만**
 요청 `LogoutRequest { refreshToken }`(`@NotBlank`). 컨트롤러 `@PreAuthorize("isAuthenticated()")`.
 - 흐름(`@AuthenticationPrincipal MemberPrincipal` + `@RequestHeader(AUTHORIZATION)`):
-  1. 헤더의 access 토큰을 `Bearer ` 제거 후 `parse` → `jti`·`exp` → `tokenBlacklist.blacklist(jti, exp)`. (필터가 이미 검증했으므로 재파싱은 성공 보장. 방어적 try/catch로 실패 시 skip.)
+  1. 헤더의 access 토큰에서 `Bearer` 접두사(끝 공백 포함)를 제거 후 `parse` → `jti`·`exp` → `tokenBlacklist.blacklist(jti, exp)`. (필터가 이미 검증했으므로 재파싱은 성공 보장. 방어적 try/catch로 실패 시 skip.)
      - `MemberPrincipal`에 jti가 없어 **헤더 토큰을 재파싱**한다(G3 필터·principal 무수정 — 가장 작은 blast radius).
   2. body `refreshToken`을 `try/catch(JwtException | IllegalArgumentException)`로 `parse` → `type=="refresh"` **이고** `sub == principal.uuid`일 때만 `refreshTokenStore.revoke(uuid, refreshJti)`. 무효(파싱 실패)/타인 토큰은 **skip**(여기선 INVALID_TOKEN을 던지지 않는다 — access 블랙리스트는 이미 완료, 멱등 로그아웃·정보 노출·타 세션 침해 방지).
 - refresh revoke를 함께 하는 이유: access 블랙리스트(잔여 ≤1h)만으로는 14일 refresh로 재로그인돼 로그아웃이 실효성을 잃는다. (스펙 §4.1은 "블랙리스트"만 언급하나 G3 설계 L110이 이 매핑을 적시.)

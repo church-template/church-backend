@@ -16,6 +16,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ContentTagId implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     @Column(name = "tag_id", nullable = false)
     private Long tagId;
 

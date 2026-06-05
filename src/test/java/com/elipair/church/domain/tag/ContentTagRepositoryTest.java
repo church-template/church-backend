@@ -72,11 +72,14 @@ class ContentTagRepositoryTest {
         Tag worship = tagRepository.save(Tag.create("예배"));
         contentTagRepository.save(link(worship.getId(), ContentResourceType.SERMON, 1L));
         contentTagRepository.save(link(worship.getId(), ContentResourceType.SERMON, 2L));
+        contentTagRepository.save(link(worship.getId(), ContentResourceType.NOTICE, 1L)); // 같은 id·다른 타입은 보존돼야
 
         contentTagRepository.deleteByResource(ContentResourceType.SERMON, 1L);
 
         assertThat(contentTagRepository.findResourceIdsByTag(worship.getId(), ContentResourceType.SERMON))
                 .containsExactly(2L);
+        assertThat(contentTagRepository.findResourceIdsByTag(worship.getId(), ContentResourceType.NOTICE))
+                .containsExactly(1L);
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.elipair.church.domain.auth;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -203,5 +204,44 @@ class AuthApiTest {
                         .content("{\"refreshToken\":\"" + access + "\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_TOKEN")); // type=access 거부
+    }
+
+    @Test
+    void logout_blacklists_access_and_revokes_refresh() throws Exception {
+        persistMember("01012345678", "password123", "USER");
+        String body = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"010-1234-5678\",\"password\":\"password123\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String access = objectMapper.readTree(body).path("tokens").path("accessToken").asText();
+        String refresh = objectMapper.readTree(body).path("tokens").path("refreshToken").asText();
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer " + access)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refresh + "\"}"))
+                .andExpect(status().isNoContent());
+
+        // (a) 블랙리스트된 access로 보호 경로 접근 → 401
+        mockMvc.perform(get("/api/members/me").header("Authorization", "Bearer " + access))
+                .andExpect(status().isUnauthorized());
+
+        // (b) revoke된 refresh로 재발급 시도 → 401
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refresh + "\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_TOKEN"));
+    }
+
+    @Test
+    void logout_without_authentication_is_401() throws Exception {
+        // 유효한 본문이지만 인증 없음 → @PreAuthorize 거부(검증오류 아님)
+        mockMvc.perform(post("/api/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"some-token\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_TOKEN"));
     }
 }

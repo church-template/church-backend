@@ -13,6 +13,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -38,6 +39,25 @@ public class GlobalExceptionHandler {
         ErrorCode code = e.getErrorCode();
         return ResponseEntity.status(code.getStatus())
                 .body(ErrorResponse.of(code, e.getMessage(), request.getRequestURI()));
+    }
+
+    /** 미디어 삭제 차단(스펙 §5.10) — 409 MEDIA_IN_USE + 참조 목록(references) 동봉. */
+    @ExceptionHandler(MediaInUseException.class)
+    public ResponseEntity<ErrorResponse> handleMediaInUse(MediaInUseException e, HttpServletRequest request) {
+        return ResponseEntity.status(ErrorCode.MEDIA_IN_USE.getStatus())
+                .body(ErrorResponse.ofMediaInUse(
+                        ErrorCode.MEDIA_IN_USE,
+                        "이 미디어를 참조하는 콘텐츠가 있어 삭제할 수 없습니다.",
+                        request.getRequestURI(),
+                        e.getReferences()));
+    }
+
+    /** 멀티파트 한도 초과(서블릿이 본문 파싱 전에 거부) — FileStorage 내부 검증과 같은 413 FILE_SIZE_EXCEEDED로 통일. */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(
+            MaxUploadSizeExceededException e, HttpServletRequest request) {
+        return ResponseEntity.status(ErrorCode.FILE_SIZE_EXCEEDED.getStatus())
+                .body(ErrorResponse.of(ErrorCode.FILE_SIZE_EXCEEDED, request.getRequestURI()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

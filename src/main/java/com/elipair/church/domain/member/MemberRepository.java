@@ -17,6 +17,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     @EntityGraph(attributePaths = {"position", "roles", "roles.permissions"})
     Optional<Member> findByUuidAndDeletedAtIsNull(UUID uuid);
 
+    @EntityGraph(attributePaths = {"position", "roles", "roles.permissions"})
     Optional<Member> findByPhoneAndDeletedAtIsNull(String phone); // D4 로그인 재사용
 
     boolean existsByPhoneAndDeletedAtIsNull(String phone);

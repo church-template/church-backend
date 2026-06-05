@@ -8,8 +8,6 @@ import com.elipair.church.domain.auth.dto.RefreshResponse;
 import com.elipair.church.domain.auth.dto.SignupRequest;
 import com.elipair.church.domain.auth.dto.SignupResponse;
 import com.elipair.church.domain.auth.dto.TokenPair;
-import io.jsonwebtoken.JwtException;
-import java.util.UUID;
 import com.elipair.church.domain.member.Member;
 import com.elipair.church.domain.member.MemberAuthorities;
 import com.elipair.church.domain.member.MemberRepository;
@@ -23,6 +21,8 @@ import com.elipair.church.global.security.MemberPrincipal;
 import com.elipair.church.global.security.redis.RefreshTokenStore;
 import com.elipair.church.global.security.redis.TokenBlacklist;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
+import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -97,11 +97,14 @@ public class AuthService {
 
     /** access + refresh 발급, 발급한 refresh를 재파싱해 jti·exp로 다중세션 등록. */
     private TokenPair issueTokens(Member member) {
-        String access = tokenProvider.issueAccess(principalOf(member), positionOf(member),
-                MemberAuthorities.permissions(member));
+        String access = tokenProvider.issueAccess(
+                principalOf(member), positionOf(member), MemberAuthorities.permissions(member));
         String refresh = tokenProvider.issueRefresh(member.getUuid().toString());
         Claims claims = tokenProvider.parse(refresh); // 자기 서명 토큰 — 항상 성공
-        refreshTokenStore.save(member.getUuid().toString(), claims.getId(), claims.getExpiration().toInstant());
+        refreshTokenStore.save(
+                member.getUuid().toString(),
+                claims.getId(),
+                claims.getExpiration().toInstant());
         return new TokenPair(access, refresh);
     }
 
@@ -127,8 +130,8 @@ public class AuthService {
                 .findByUuidAndDeletedAtIsNull(UUID.fromString(uuid))
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_TOKEN)); // 탈퇴 회원
         // Access만 재발급 — DB에서 권한 재조회(스펙 §4.1), refresh는 그대로 echo
-        String access = tokenProvider.issueAccess(principalOf(member), positionOf(member),
-                MemberAuthorities.permissions(member));
+        String access = tokenProvider.issueAccess(
+                principalOf(member), positionOf(member), MemberAuthorities.permissions(member));
         return new RefreshResponse(new TokenPair(access, request.refreshToken()));
     }
 

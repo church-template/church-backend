@@ -15,8 +15,6 @@ import com.elipair.church.domain.auth.dto.LoginRequest;
 import com.elipair.church.domain.auth.dto.RefreshRequest;
 import com.elipair.church.domain.auth.dto.SignupRequest;
 import com.elipair.church.domain.auth.dto.SignupResponse;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.MalformedJwtException;
 import com.elipair.church.domain.member.Member;
 import com.elipair.church.domain.member.MemberRepository;
 import com.elipair.church.domain.role.Role;
@@ -27,6 +25,8 @@ import com.elipair.church.global.security.JwtTokenProvider;
 import com.elipair.church.global.security.MemberPrincipal;
 import com.elipair.church.global.security.redis.RefreshTokenStore;
 import com.elipair.church.global.security.redis.TokenBlacklist;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.MalformedJwtException;
 import java.util.Date;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -39,14 +39,26 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
 
-    @Mock private MemberRepository memberRepository;
-    @Mock private RoleRepository roleRepository;
-    @Mock private PasswordEncoder passwordEncoder;
-    @Mock private JwtTokenProvider tokenProvider;
-    @Mock private RefreshTokenStore refreshTokenStore;
-    @Mock private TokenBlacklist tokenBlacklist;
+    @Mock
+    private MemberRepository memberRepository;
 
-    @InjectMocks private AuthService authService;
+    @Mock
+    private RoleRepository roleRepository;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private JwtTokenProvider tokenProvider;
+
+    @Mock
+    private RefreshTokenStore refreshTokenStore;
+
+    @Mock
+    private TokenBlacklist tokenBlacklist;
+
+    @InjectMocks
+    private AuthService authService;
 
     @Test
     void signup_normalizes_phone_grants_user_and_returns_summary() {
@@ -57,8 +69,8 @@ class AuthServiceTest {
         when(roleRepository.findByName("USER")).thenReturn(Optional.of(userRole));
         when(memberRepository.saveAndFlush(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        SignupResponse res = authService.signup(
-                new SignupRequest("010-1234-5678", "홍길동", "password123", null, true, true));
+        SignupResponse res =
+                authService.signup(new SignupRequest("010-1234-5678", "홍길동", "password123", null, true, true));
 
         assertThat(res.name()).isEqualTo("홍길동");
         assertThat(res.phone()).isEqualTo("01012345678");
@@ -69,8 +81,8 @@ class AuthServiceTest {
     void signup_duplicate_phone_is_duplicate_resource() {
         when(memberRepository.existsByPhoneAndDeletedAtIsNull("01012345678")).thenReturn(true);
 
-        assertThatThrownBy(() -> authService.signup(
-                        new SignupRequest("010-1234-5678", "홍길동", "password123", null, true, true)))
+        assertThatThrownBy(() ->
+                        authService.signup(new SignupRequest("010-1234-5678", "홍길동", "password123", null, true, true)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.DUPLICATE_RESOURCE);
@@ -78,8 +90,8 @@ class AuthServiceTest {
 
     @Test
     void signup_rejects_when_consent_not_given() {
-        assertThatThrownBy(() -> authService.signup(
-                        new SignupRequest("010-1234-5678", "홍길동", "password123", null, false, true)))
+        assertThatThrownBy(() ->
+                        authService.signup(new SignupRequest("010-1234-5678", "홍길동", "password123", null, false, true)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);

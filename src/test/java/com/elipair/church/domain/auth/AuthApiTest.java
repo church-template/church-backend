@@ -12,7 +12,6 @@ import com.elipair.church.domain.role.Role;
 import com.elipair.church.domain.role.RoleRepository;
 import com.elipair.church.global.security.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
-import tools.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -23,18 +22,30 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class AuthApiTest {
 
-    @Autowired private MockMvc mockMvc;
-    @Autowired private MemberRepository memberRepository;
-    @Autowired private RoleRepository roleRepository;
-    @Autowired private PasswordEncoder passwordEncoder;
-    @Autowired private ObjectMapper objectMapper;
-    @Autowired private JwtTokenProvider provider;
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private MemberRepository memberRepository;
+
+    @Autowired
+    private RoleRepository roleRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private JwtTokenProvider provider;
 
     @AfterEach
     void cleanup() {
@@ -156,7 +167,9 @@ class AuthApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phone\":\"" + phone + "\",\"password\":\"" + rawPassword + "\"}"))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         return objectMapper.readTree(body).path("tokens").path(field).asText();
     }
 
@@ -176,9 +189,12 @@ class AuthApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tokens.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.tokens.refreshToken").value(refresh)) // refresh echo
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
-        String newAccess = objectMapper.readTree(body).path("tokens").path("accessToken").asText();
+        String newAccess =
+                objectMapper.readTree(body).path("tokens").path("accessToken").asText();
         Claims claims = provider.parse(newAccess);
         @SuppressWarnings("unchecked")
         List<String> permissions = claims.get(JwtTokenProvider.CLAIM_PERMISSIONS, List.class);
@@ -213,9 +229,13 @@ class AuthApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phone\":\"010-1234-5678\",\"password\":\"password123\"}"))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        String access = objectMapper.readTree(body).path("tokens").path("accessToken").asText();
-        String refresh = objectMapper.readTree(body).path("tokens").path("refreshToken").asText();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String access =
+                objectMapper.readTree(body).path("tokens").path("accessToken").asText();
+        String refresh =
+                objectMapper.readTree(body).path("tokens").path("refreshToken").asText();
 
         mockMvc.perform(post("/api/auth/logout")
                         .header("Authorization", "Bearer " + access)

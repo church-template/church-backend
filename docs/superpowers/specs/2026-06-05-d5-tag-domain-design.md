@@ -1,0 +1,167 @@
+# D5 — 글로벌 태그 + 다형 연결(content_tags) 도메인 설계
+
+- **이슈:** #10 (Phase 3, media(D6)와 병렬)
+- **스펙 근거:** `docs/church-backend-spec.md` §5.11, §6(인덱스), §7(패키지)
+- **선행:** G1(부트스트랩)·G2(공통·RFC7807 예외)·RBAC 시드(V2의 `TAG_MANAGE`)
+- **상태:** 설계 확정 (브레인스토밍 합의)
+
+---
+
+## 1. 한 줄 요약
+
+설교·공지·이벤트·갤러리 앨범을 가로질러 묶는 **단일 글로벌 태그 풀**(`tags`)과, 콘텐츠↔태그를 잇는 **다형 연결 테이블**(`content_tags`)을 구현한다. 콘텐츠 도메인이 아직 없으므로, 콘텐츠가 *나중에* 호출할 **재사용 링킹 컴포넌트(`ContentTagService`)까지 만들고 독립 단위 테스트로 검증**하되, 실제 콘텐츠 배선은 각 콘텐츠 이슈로 이연한다.
+
+## 2. 범위 경계 (가장 중요)
+
+선택지 중 **"풀 + 링커 컴포넌트(Approach B)"** 를 채택했다. G3(토큰스토어를 먼저 만들고 D4가 배선)·G4(스토리지 추상화를 먼저 만들고 media가 배선)와 동일한 선례다.
+
+### 이번 #10에서 짓는다
+- `tags` 글로벌 풀 — 엔티티·리포지토리·서비스·CRUD·공개 목록 API
+- `content_tags` 다형 연결 테이블 + `ContentTag` 엔티티/리포지토리 + `ContentResourceType` enum
+- 재사용 컴포넌트 **`ContentTagService`** — 콘텐츠 도메인이 호출할 링킹/무결성/조회/필터 API
+- 위 전부의 단위·통합 테스트 (소비자 없이 독립 검증)
+
+### 콘텐츠 이슈(D7~D11)로 이연한다
+- sermon/notice/event/gallery 서비스가 `ContentTagService`를 **실제 배선**하는 일:
+  - 생성·수정 시 `replaceLinks(type, id, tagIds)`
+  - 콘텐츠 soft-delete 시 `cleanUp(type, id)`
+  - 목록 `?tagId=` 필터 (콘텐츠 쿼리 JOIN 또는 `resourceIdsWithTag` 보조)
+  - 상세·목록 응답에 `tags:[{id,name}]` 포함
+
+> 소비자가 존재하지 않는데 리소스-레지스트리 같은 추상화를 선제적으로 만들지 않는다(YAGNI). 링킹 계약은 스펙이 명확히 정의하므로 지금 컴포넌트를 완성해도 미스매치 위험이 낮다.
+
+## 3. 데이터 모델 — `V4__create_tags.sql`
+
+```sql
+CREATE TABLE tags (
+    id         BIGSERIAL PRIMARY KEY,
+    name       VARCHAR(50)  NOT NULL UNIQUE,
+    created_at TIMESTAMP    NOT NULL
+);
+
+CREATE TABLE content_tags (
+    tag_id        BIGINT      NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    resource_type VARCHAR(30) NOT NULL,   -- SERMON / NOTICE / EVENT / GALLERY_ALBUM
+    resource_id   BIGINT      NOT NULL,
+    PRIMARY KEY (tag_id, resource_type, resource_id)
+);
+
+CREATE INDEX idx_content_tags_resource
+    ON content_tags (resource_type, resource_id);   -- 콘텐츠→태그 역조회용
+```
+
+### 설계 결정
+- **`tags`는 물리 삭제** — 스펙 §5.11 테이블에 `deleted_at`이 없다. `Role`/`Position`과 동일하게 `BaseTimeEntity`(created_at만) 상속, soft-delete/version 없음.
+- **`content_tags`는 순수 조인 테이블** — 타임스탬프·소프트삭제 없음(스펙 컬럼 그대로).
+- **인덱스 — 스펙의 `(tag_id, resource_type)`는 의도적으로 생략.** PK `(tag_id, resource_type, resource_id)`의 앞 prefix가 `(tag_id, resource_type)`를 이미 커버하므로(태그 필터 조회 `WHERE tag_id=? AND resource_type=?`가 PK 인덱스를 탐), 중복 인덱스를 만들지 않는다. PK로 안 덮이는 역조회 `(resource_type, resource_id)` 하나만 추가한다. 스펙의 두 인덱스 의도(태그 필터 + 콘텐츠 역조회)는 모두 충족된다.
+- **FK `ON DELETE CASCADE`** — 태그 물리 삭제 시 연결 row 자동 정리(스펙 "CASCADE"). 단 앱에서도 `deleteByTagId`로 명시 정리해 단위 테스트로 증명하고, DB CASCADE는 백스톱으로 둔다(DDL 동작에만 의존하지 않음).
+- **빌드그린 불변식(SB4 함정):** V4 마이그레이션(테이블)을 엔티티보다 **먼저** 커밋한다. 엔티티가 먼저면 `ddl-auto: validate`가 "missing table"로 전 `@SpringBootTest`를 깬다.
+
+## 4. 엔티티 / 리포지토리
+
+### `Tag` (`domain/tag/Tag.java`)
+`Role` 미러. `extends BaseTimeEntity`, `@Id @GeneratedValue(IDENTITY)`, `@Column(unique=true, length=50) name`. 팩토리 `Tag.create(String name)`, 변경 `rename(String name)`. `@NoArgsConstructor(PROTECTED)`.
+
+### `ContentResourceType` (`domain/tag/ContentResourceType.java`)
+`enum { SERMON, NOTICE, EVENT, GALLERY_ALBUM }`. `@Enumerated(STRING)`으로 `content_tags.resource_type`에 enum 이름(대문자) 저장.
+- 이 값은 **내부 조인 메타데이터**일 뿐 API 응답에 노출되지 않는다(응답은 `tags:[{id,name}]`). 따라서 스펙 §5.11의 소문자 예시(`sermon`)와 대문자 저장(`SERMON`)의 차이는 무해하며, "코드-facing 키는 영어"(§4.4) 규칙과도 일치한다.
+- 콘텐츠 도메인은 이 enum을 import해 `ContentTagService` 호출 시 자기 타입을 넘긴다. (아키텍처 규칙은 `global → domain`만 금지하므로 `domain(sermon) → domain(tag)` 의존은 허용된다 — `ArchitectureTest` 확인.)
+
+### `ContentTag` (`domain/tag/ContentTag.java`)
+`@EmbeddedId ContentTagId(Long tagId, ContentResourceType resourceType, Long resourceId)`. 컬럼 외 추가 필드 없음, plain `@Entity`. `ContentTagId`는 `equals/hashCode` 구현(복합키 계약).
+
+### 리포지토리
+- **`TagRepository`** — `findAllByOrderByNameAsc()`, `existsByName(String)`, `existsByNameAndIdNot(String, Long)`, `findByIdIn(Collection<Long>)`(태그ID 검증용).
+- **`ContentTagRepository`** —
+  - `void deleteByTagId(Long)` — 태그 삭제 시 연결 정리
+  - `void deleteByResourceTypeAndResourceId(ContentResourceType, Long)` — 콘텐츠 cleanUp / 교체 전 비우기
+  - `List<ContentTag> findByResourceTypeAndResourceId(ContentResourceType, Long)`
+  - `List<ContentTag> findByResourceTypeAndResourceIdIn(ContentResourceType, Collection<Long>)` — 목록 배치
+  - `List<ContentTag> findByTagIdAndResourceType(Long, ContentResourceType)` — `?tagId=` 필터 보조
+  - `@Modifying` delete 메서드는 `clearAutomatically = true`(벌크 후 L1 stale 방지 — D3 학습).
+
+## 5. `ContentTagService` 계약 (이 이슈의 핵심 산출)
+
+```java
+@Service
+@Transactional(readOnly = true)
+public class ContentTagService {
+
+    /** 콘텐츠 생성·수정 시 호출. tagIds 전량 교체(dedup, 빈 리스트면 전부 해제). */
+    @Transactional
+    void replaceLinks(ContentResourceType type, Long resourceId, List<Long> tagIds);
+
+    /** 콘텐츠 상세 응답용 — 한 리소스의 태그. */
+    List<TagResponse> getTags(ContentResourceType type, Long resourceId);
+
+    /** 콘텐츠 목록 응답용 — N+1 회피 배치 조회. */
+    Map<Long, List<TagResponse>> getTagsByResources(ContentResourceType type, Collection<Long> resourceIds);
+
+    /** 콘텐츠 soft-delete 시 연결 정리. */
+    @Transactional
+    void cleanUp(ContentResourceType type, Long resourceId);
+
+    /** ?tagId= 필터 보조 — 해당 태그를 가진 리소스 id 목록. */
+    List<Long> resourceIdsWithTag(ContentResourceType type, Long tagId);
+}
+```
+
+### 참조 무결성 책임 분담 (스펙 §5.11 "연결 생성 시 대상 리소스 존재 검증" 해소)
+- **리소스 존재**는 **호출자(콘텐츠 도메인)가 구조적으로 보장**한다. `replaceLinks`를 부를 시점에 콘텐츠 도메인은 이미 그 리소스를 방금 생성/로드해 손에 쥔 상태이므로, 별도 리소스 존재 검증이 불필요하다. → 소비자 없는 지금 리소스-레지스트리 추상화를 만들 필요가 사라진다.
+- **태그 존재**는 `ContentTagService`가 검증한다: `tagRepository.findByIdIn(distinct tagIds)`의 개수가 입력 개수와 다르면 `INVALID_INPUT_VALUE`(존재하지 않는 태그 포함). 태그ID는 요청 입력이므로 404가 아닌 400으로 본다.
+- `replaceLinks` 동작: `distinct` → 태그 검증 → `deleteByResourceTypeAndResourceId` 후 새 연결 일괄 insert(전량 교체). 멱등.
+
+## 6. 태그 풀 API & `TagService`
+
+| 메서드 | 경로 | 권한 | 설명 |
+|---|---|---|---|
+| GET | `/api/tags` | 공개 | 비페이징 평배열(name ASC) — 필터·작성 폼용. position/role 마스터목록 패턴 |
+| POST | `/api/admin/tags` | `TAG_MANAGE` | 태그 추가 |
+| PATCH | `/api/admin/tags/{id}` | `TAG_MANAGE` | 태그 수정(rename) |
+| DELETE | `/api/admin/tags/{id}` | `TAG_MANAGE` | 태그 삭제 — **비차단**, 연결도 정리 |
+
+### `TagService` (`RoleService` 패턴 그대로)
+- `list()` → `findAllByOrderByNameAsc` 매핑(비페이징 평배열).
+- `create(name)` → `normalizeName`(trim·blank거부→`INVALID_INPUT_VALUE`) → `existsByName` 선검사 → `saveAndFlush` try/catch `DataIntegrityViolationException` → `DUPLICATE_RESOURCE` 백스톱.
+- `update(id, name)` → `findById`/`RESOURCE_NOT_FOUND` → 변경 시 `existsByNameAndIdNot` → `rename` → persist 백스톱.
+- `delete(id)` → `findById`/`RESOURCE_NOT_FOUND` → **비차단 삭제**: `contentTagRepository.deleteByTagId(id)` → `tagRepository.delete(tag)`.
+  - **미디어의 차단 삭제(`MEDIA_IN_USE`)와 의도적 대비.** 스펙: 태그는 글로벌 풀이라 삭제 시 연결만 사라지고 콘텐츠는 무영향. 삭제 영향이 여러 도메인에 걸친다는 점은 관리자 UX(프론트 경고)로 처리.
+
+### DTO
+- `TagResponse(Long id, String name)` — GET 목록·관리자 응답·콘텐츠 `tags:[]` 임베드 공용.
+- `TagCreateRequest(@NotBlank String name)`.
+- `TagUpdateRequest(@Size(max=50) String name)` + 서비스 `normalizeName`.
+
+### 권한 매핑
+- `AdminTagController`에 `@PreAuthorize("hasAuthority('TAG_MANAGE')")`. `TAG_MANAGE`는 V2 시드에 이미 존재, SUPER_ADMIN·ADMIN이 보유 → **신규 시드/마이그레이션 불필요**.
+
+## 7. 무엇을 바꾸지 않는가
+- **`SecurityConfig` 무수정** — 경로 3분법이 이미 커버: `/api/admin/**`=authenticated(+메서드 `@PreAuthorize`), 그 외 `/api/**`=permitAll. `/api/tags`(공개)·`/api/admin/tags/**`(인증+TAG_MANAGE) 모두 추가 규칙 없이 동작.
+- **`ErrorCode` 무수정** — `DUPLICATE_RESOURCE`·`RESOURCE_NOT_FOUND`·`INVALID_INPUT_VALUE` 재사용. 신규 코드 없음.
+- **권한 시드 무수정** — `TAG_MANAGE` 기존.
+
+## 8. 테스트 계획 (목표 80%+, 관행 90%+)
+- **`TagRepositoryTest`** — unique 제약, `existsBy*`, `findByIdIn`.
+- **`TagServiceTest`** — 생성/수정/삭제, 중복(`DUPLICATE_RESOURCE`), normalize(blank거부), 미존재(`RESOURCE_NOT_FOUND`), 삭제 시 연결 정리 호출.
+- **`ContentTagServiceTest`** (Testcontainers — 복합키·조인) — `replaceLinks` 태그ID 검증/전량 교체/dedup/빈 리스트 해제, `getTags`, `getTagsByResources` 배치, `cleanUp`, `resourceIdsWithTag`.
+- **`TagApiTest`** (Testcontainers) — 공개 GET, 관리자 CRUD authz(익명 401·권한부족 403), 중복 409, 미존재 404, 검증 400.
+
+## 9. 산출 파일
+```
+src/main/resources/db/migration/V4__create_tags.sql      (신규)
+domain/tag/Tag.java                                       (신규)
+domain/tag/ContentTag.java                                (신규)
+domain/tag/ContentTagId.java                              (신규)
+domain/tag/ContentResourceType.java                      (신규)
+domain/tag/TagRepository.java                             (신규)
+domain/tag/ContentTagRepository.java                      (신규)
+domain/tag/TagService.java                                (신규)
+domain/tag/ContentTagService.java                         (신규)
+domain/tag/TagController.java                             (신규, 공개 GET)
+domain/tag/AdminTagController.java                        (신규, TAG_MANAGE)
+domain/tag/dto/TagResponse.java                           (신규)
+domain/tag/dto/TagCreateRequest.java                     (신규)
+domain/tag/dto/TagUpdateRequest.java                     (신규)
++ 테스트 4종
+```
+(도메인이 단순하므로 `controller/service/...` 하위 폴더 없이 `domain/tag` 평면 + `dto/`만 — 스펙 §7 "단순하면 평면" 지침, position/role과 동일.)

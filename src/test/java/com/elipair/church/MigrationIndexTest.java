@@ -62,4 +62,13 @@ class MigrationIndexTest {
                 .contains("phone")
                 .contains("deleted_at IS NULL");
     }
+
+    @Test
+    void events_start_at_is_partial_on_active_rows() {
+        assertThat(indexDef("idx_events_start_at"))
+                .as("V9 일정 시작일 범위 인덱스")
+                .isNotNull()
+                .contains("start_at")
+                .contains("deleted_at IS NULL");
+    }
 }

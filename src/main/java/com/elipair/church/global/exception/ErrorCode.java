@@ -22,6 +22,7 @@ public enum ErrorCode {
     OPTIMISTIC_LOCK_CONFLICT(HttpStatus.CONFLICT, "OPTIMISTIC_LOCK_CONFLICT", "다른 사용자가 먼저 수정했습니다"),
     DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "DUPLICATE_RESOURCE", "이미 존재하는 리소스입니다"),
     ROLE_IN_USE(HttpStatus.CONFLICT, "ROLE_IN_USE", "회원에게 할당된 역할은 삭제할 수 없습니다"),
+    DEPARTMENT_HAS_CHILDREN(HttpStatus.CONFLICT, "DEPARTMENT_HAS_CHILDREN", "하위 부서가 있어 삭제할 수 없습니다"),
     FILE_SIZE_EXCEEDED(HttpStatus.CONTENT_TOO_LARGE, "FILE_SIZE_EXCEEDED", "파일 크기가 허용 한도를 초과했습니다"),
     FILE_STORAGE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_STORAGE_ERROR", "파일 처리 중 오류가 발생했습니다"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "서버 오류가 발생했습니다");

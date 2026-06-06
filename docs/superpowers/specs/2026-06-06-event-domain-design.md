@@ -20,13 +20,13 @@ Event는 Sermon·Notice가 세운 콘텐츠 도메인 패턴을 따르되, **달
 
 | 항목 | 결정 | 근거 |
 |---|---|---|
-| **날짜 범위 판정** | **겹침(overlap)** — `start_at < toExclusive AND COALESCE(end_at, start_at) >= from` | 여러 날 행사(수련회 등)가 걸친 모든 달의 달력에 노출되어야 정확. `COALESCE(end_at, start_at)`로 end_at이 null인 점 이벤트가 범위 밖에서 오탐되지 않게 한다(예: 5/1 점 이벤트가 6월 조회에 끼지 않음). |
+| **날짜 범위 판정** | **겹침(overlap), end_at 배타(exclusive)** — `start_at < toExclusive AND ( end_at > from OR (end_at IS NULL AND start_at >= from) )` | 여러 날 행사(수련회 등)가 걸친 모든 달의 달력에 노출되어야 정확. **end_at은 배타**(이벤트 점유 구간 `[start_at, end_at)`)라, end_at이 범위 경계 `from`과 정확히 같은 행사(예: 5/31 22:00→6/1 00:00)는 6월에 노출되지 않는다(반열림 구간 off-by-one 차단, 리뷰 Finding 1). end_at이 null인 점/종일 이벤트는 `start_at`으로 매칭하므로 경계 `from`의 점 이벤트(예: 6/1 00:00 종일)는 정상 포함된다. |
 | **작성자 표시** | **노출 안 함** — 응답 DTO에 author 필드 없음 | §5.6 일정 필드가 `created_by/updated_by`를 생략하고, §5 작성자표시 정책도 대상에서 이벤트를 제외(설교·공지·갤러리·주보만 열거). 엔티티는 BaseEntity를 상속해 `version`·감사 컬럼은 보유(감사·낙관락)하되 API로는 내지 않는다. |
 | **view_count** | **없음** | §5.6 일정 필드에 없고, Redis §9 조회수 카운팅 대상은 설교·공지뿐. → `get(id)`는 조회수 증가 쿼리 없음(notice/sermon과 다른 점). |
 | **`?q=` 텍스트 검색** | **없음** | §5.6은 range + tag 필터만 명시. notice의 `q`에 해당하는 기능을 일부러 두지 않아 더 단순. |
-| **낙관락** | `version`(@Version) + 서비스 명시적 version 비교, update/patch는 mutation 후 **`repository.flush()`** | sermon·notice에서 정착시킨 정합. flush로 응답 `version`을 post-increment(N→N+1)로 보장해 클라이언트의 다음 수정 재전송이 stale 409를 맞지 않게 한다. |
+| **낙관락 범위** | `version`(@Version)은 **events 행만** 보호. update/patch는 mutation 후 **`repository.flush()`** | sermon·notice 정합 답습. **flush는 엔티티 필드가 변경됐을 때만 version을 N→N+1로 올린다**(dirty checking). **tag-only 수정**(스칼라 동일·`tagIds`만 변경)은 events 행이 변하지 않으므로 version 미증가가 정상 — 태그는 `content_tags`(별도 테이블)에 살고 그 동시성은 last-writer-wins다(events `@Version`이 보호하지 않음). 따라서 응답 `version`은 "엔티티 필드 변경 시 N+1"이며 "항상 N+1"이 아니다(리뷰 Finding 2). Notice/Sermon과 동일 동작. |
 | **미디어 참조 매칭** | **경계 안전**(PG 정규식 `media:{id}($\|[^0-9])`) | 순진한 `LIKE '%media:42%'`는 `media:420`도 매칭 → 잘못된 삭제 차단. sermon·notice 선례 그대로. 매칭 대상 컬럼은 `description`. |
-| **end_at / all_day** | end_at nullable(점 이벤트 허용), all_day boolean(기본 false, 표시 플래그) | start_at/end_at은 TIMESTAMP. all_day=true여도 타임스탬프는 그대로 저장하고 "종일" 표시는 프론트가 처리한다. |
+| **end_at / all_day** | end_at nullable(=점 이벤트), **배타(exclusive) 종료**, all_day boolean(기본 false, 표시 플래그) | start_at/end_at은 TIMESTAMP. end_at은 배타라 `end_at == start_at`(0-duration)은 빈 구간이라 **금지**(교차검증이 `end_at`을 `start_at`보다 **엄격히 이후**로 요구, §5.1). 점 이벤트는 end_at=null로 표현. all_day=true여도 타임스탬프는 그대로 저장하고 "종일" 표시는 프론트가 처리한다. |
 | **정렬** | 기본 `start_at ASC`(`@PageableDefault`), 클라이언트 `?sort=` 덮어쓰기 허용 | 스펙 §5.6 "기본 정렬: start_at(달력·시작일 기준)". 강제 prefix 요구 문구 없음(notice 선례와 동일). |
 
 ## 2. 데이터 모델
@@ -85,10 +85,18 @@ CREATE INDEX idx_events_start_at ON events (start_at) WHERE deleted_at IS NULL;
 
 `null` 인자는 술어에서 제외. 항상 `deletedAt IS NULL` 기본 술어.
 
-- **range**(겹침) — `range`가 있으면(from·toExclusive 보유):
-  `start_at < toExclusive` **AND** `COALESCE(end_at, start_at) >= from`.
-  - Criteria로: `cb.lessThan(root.get("startAt"), toExclusive)`,
-    `cb.greaterThanOrEqualTo(cb.coalesce(root.get("endAt"), root.get("startAt")), from)`.
+- **range**(겹침, end_at 배타) — `range`가 있으면(from·toExclusive 보유):
+  `start_at < toExclusive` **AND** `( end_at > from OR (end_at IS NULL AND start_at >= from) )`.
+  - Criteria로:
+    ```java
+    cb.and(
+        cb.lessThan(root.get("startAt"), toExclusive),
+        cb.or(
+            cb.greaterThan(root.get("endAt"), from),
+            cb.and(cb.isNull(root.get("endAt")),
+                   cb.greaterThanOrEqualTo(root.get("startAt"), from))));
+    ```
+  - end_at은 배타 종료라 경계 `from`과 같은 end_at은 제외(off-by-one 차단), null 점 이벤트는 start_at으로 포함. `start_at < toExclusive`가 `idx_events_start_at` 상한을 탄다.
   - `range`가 null이면(파라미터 미지정) 범위 술어 제외 → 전체(페이지네이션만).
 - **taggedIds** — **서비스가 미리 해석해 넘긴 id 목록**(`List<Long>`)을 `id IN (...)`로. `null`이면 술어 제외,
   빈 리스트면 결과 없음(불가능 술어). Specification은 순수 조건 빌더로 유지하고 태그 id 해석은 서비스 책임(notice와 동일).
@@ -129,17 +137,18 @@ findReferences(long mediaId):
 - **patch**(id, req) `@Transactional` — 부분 갱신
   - load(404) → version 비교 → `e.applyPatch(...)`(전달 필드만) →
     tagIds **제공 시에만** `replaceLinks`(null이면 태그 유지) → **`repository.flush()`** → `detail(e)`.
-  - **flush 이유**: tagIds 미제공 PATCH는 detail이 `content_tags`만 쿼리해 dirty event가 auto-flush 되지 않는다.
-    mutation 직후 명시적 flush로 버전 UPDATE를 강제(in-memory `version` N→N+1)해야 응답 `version`이 post-increment 값이 되어
-    클라이언트의 다음 수정 재전송이 stale 409를 맞지 않는다(notice §5와 동일 정합).
+  - **flush 이유(엔티티 필드 변경 시)**: 스칼라 필드가 바뀐 PATCH는 detail이 `content_tags`만 쿼리해 dirty event가 auto-flush 되지 않을 수 있다. mutation 직후 명시적 flush로 버전 UPDATE를 강제(in-memory `version` N→N+1)해 응답 `version`이 post-increment 값이 되게 한다(notice §5와 동일 정합).
+  - **tag-only 수정의 version 정책(리뷰 Finding 2)**: `tagIds`만 바뀌고 스칼라 필드는 그대로면 event 엔티티가 **dirty가 아니라** flush해도 version은 N 그대로다. 이는 의도된 동작 — events 행이 변하지 않았으므로 `@Version`(events 행 보호)이 오르지 않는 게 맞다. 태그 동시성은 `content_tags`의 last-writer-wins로 처리되며 events `@Version`의 보호 대상이 아니다. 따라서 **"항상 N+1"이 아니라 "엔티티 필드 변경 시에만 N+1"**이다. tag-only 동시 수정에서 두 요청이 같은 version으로 통과해 마지막 태그 교체가 이기는 것은 허용된 동작(Notice/Sermon과 동일). 더 강한 보장이 필요하면 `OPTIMISTIC_FORCE_INCREMENT`가 선택지이나, 현 설계는 Notice/Sermon 일관성과 단순성을 택해 채택하지 않는다.
 - **delete**(id) `@Transactional`
   - load(404) → `e.softDelete()` → `ContentTagService.cleanUp(EVENT, id)`.
 
-### 5.1 교차 필드 검증 — `end_at >= start_at`
+### 5.1 교차 필드 검증 — `end_at`은 `start_at`보다 **엄격히 이후**
 
-- **create/update**: 요청 record에 `@AssertTrue` 메서드로 `endAt == null || startAt == null || !endAt.isBefore(startAt)` 검증(둘 다 record에 존재).
+end_at은 배타 종료라 `end_at == start_at`(0-duration 빈 구간)도 금지한다. 점 이벤트는 end_at=null로 표현한다.
+
+- **create/update**: 요청 record에 `@AssertTrue` 메서드로 `endAt == null || startAt == null || endAt.isAfter(startAt)` 검증(둘 다 record에 존재). `end == start`·`end < start` 모두 `INVALID_INPUT_VALUE`.
 - **patch**: start_at/end_at 중 일부만 올 수 있어 record 단독 검증 불가 → 서비스가 patch 적용 **후** effective start/end를 비교,
-  역전이면 `INVALID_INPUT_VALUE`. (DB 값과 합쳐야 판정 가능하므로 서비스 책임.)
+  `effectiveEnd != null && !effectiveEnd.isAfter(effectiveStart)`이면 `INVALID_INPUT_VALUE`. (DB 값과 합쳐야 판정 가능하므로 서비스 책임.)
 
 > 낙관락 이중 안전망: 서비스의 명시적 version 비교가 "stale 클라이언트 버전"을 결정적으로 409로 만든다.
 > load~flush 사이 동시 커밋은 JPA `@Version`이 `ObjectOptimisticLockingFailureException`을 던지고,
@@ -161,7 +170,7 @@ findReferences(long mediaId):
 - `year`(int) + `month`(int 1–12) **둘 다** 제공 → 그 달: `from = 해당월 1일 00:00`, `toExclusive = 다음달 1일 00:00`.
 - 아니면 `startDate`(LocalDate) + `endDate`(LocalDate) **둘 다** 제공 → `from = startDate 00:00`, `toExclusive = endDate.plusDays(1) 00:00`.
 - 둘 다 없으면 → 범위 없음(전체, 페이지네이션만).
-- **검증 오류 → `400 INVALID_INPUT_VALUE`**: 한 쌍 중 하나만 제공(`year`만/`startDate`만 등), `month` 범위 밖(1–12 아님), `endDate < startDate`.
+- **검증 오류 → `400 INVALID_INPUT_VALUE`**: 한 쌍 중 하나만 제공(`year`만/`startDate`만 등), `year` 범위 밖(**1–9999 아님** — `LocalDate.of(year, month, 1)` 안전 보장, 리뷰 Finding 3), `month` 범위 밖(1–12 아님), `endDate < startDate`.
 - year/month 와 startDate/endDate가 **동시 제공**되면 year/month 우선(명시적 우선순위, 문서화).
 
 > **목록 JSON 계약**: 컨트롤러 반환 타입은 Java `Page<EventCardResponse>`지만, `WebConfig`의
@@ -185,29 +194,30 @@ findReferences(long mediaId):
 
 - `EventCreateRequest` — `title`(@NotBlank, @Size(max=200)), `description`(@Size(max=50000) — TEXT지만 스펙 §5 최소검증 상한 1개),
   `location`(@Size(max=200)), `startAt`(@NotNull LocalDateTime), `endAt`(LocalDateTime, nullable), `allDay`(Boolean, 미지정 시 false),
-  `tagIds`(List<Long>). `@AssertTrue`로 `endAt >= startAt` 교차검증.
+  `tagIds`(List<Long>). `@AssertTrue`로 `endAt == null || endAt.isAfter(startAt)` 교차검증(엄격히 이후 — `end==start` 0-duration도 거부, §5.1).
 - `EventUpdateRequest` — create 필드 + `version`(@NotNull). PUT 전체 교체. 동일 `@AssertTrue` 교차검증.
 - `EventPatchRequest` — title(@Size), description(@Size), location(@Size), startAt, endAt, allDay 전부 nullable + `version`(@NotNull).
   전달된 필드만 적용. start/end 교차검증은 서비스(§5.1).
 - `EventCardResponse` — id, title, location, startAt, endAt, allDay, tags(`List<TagResponse>`). **description·author·viewCount 없음**.
 - `EventDetailResponse` — id, title, description, location, startAt, endAt, allDay, createdAt, updatedAt,
-  **version**(편집 재전송용 — update/patch 응답은 §5 flush로 post-increment 값 보장), tags. **author 없음**.
+  **version**(편집 재전송용 — 엔티티 필드가 바뀐 update/patch 응답은 §5 flush로 post-increment; tag-only 수정은 version 유지, §5 Finding 2), tags. **author 없음**.
 
 ## 7. 테스트 (TDD, 80%+) — notice 스위트 미러링
 
 - `EventRepositoryTest`(@DataJpaTest + Testcontainers PG, `spring.flyway.enabled=false`·`ddl-auto=create-drop` —
   `NoticeRepositoryTest`와 동일 슬라이스) — `findByIdAndDeletedAtIsNull`(soft-delete 제외), **겹침 Specification 필터**
-  (range 빈/실값, **여러 날 행사가 걸친 달에 노출**, end_at null 점 이벤트가 범위 밖 미노출, taggedIds 빈/실값).
+  (range 빈/실값, **여러 날 행사가 걸친 달에 노출**, **end_at이 경계 `from`과 같은 행사는 다음 범위에서 제외**(off-by-one 회귀 가드), end_at null 점 이벤트가 `start_at` 기준 포함/제외(경계 `from`의 점 이벤트는 포함), taggedIds 빈/실값).
   > **부분 인덱스는 이 슬라이스가 검증하지 않는다**: Flyway off·create-drop이라 마이그레이션 인덱스가 생성되지 않고,
   > `ddl-auto: validate`도 인덱스는 검사하지 않는다(notice와 동일 한계). `idx_events_start_at` 정의는 `V9`가 소유한다.
   > 인덱스 회귀 검증은 기존 **`MigrationIndexTest`**(Flyway-on + `pg_indexes`)에 `idx_events_start_at` 부분 조건(`WHERE deleted_at IS NULL`) 확인을 **추가**한다.
 - `EventReferenceProviderTest` — 경계 안전 매칭(`42`가 `media:420` 미매칭), soft-deleted 제외, 다건 합산, type `"event"`.
-- `EventServiceTest` — create/update/patch/delete, **version 충돌 → 409**, 태그 연결/정리, flush 후 version N+1,
-  **PATCH(tagIds 미제공) 응답 version이 N+1로 증가하고 그 version으로 즉시 다음 수정 성공**(stale 409 회피 회귀 가드),
-  **patch 후 start/end 역전 → 400**(서비스 교차검증).
-- `EventApiTest`(Testcontainers E2E) — 공개 목록(`year/month`·`startDate/endDate`, **여러 날 행사 겹침**, tag 필터, `start_at ASC` 정렬),
+- `EventServiceTest` — create/update/patch/delete, **version 충돌 → 409**, 태그 연결/정리,
+  **스칼라 필드 변경 PATCH(tagIds 미제공) 응답 version이 N+1로 증가하고 그 version으로 즉시 다음 수정 성공**(stale 409 회피 회귀 가드),
+  **tag-only PATCH는 version이 N 그대로**(Finding 2 정책 — events 행 미변경 시 version 미증가 명시),
+  **patch 후 start/end 역전(또는 end==start) → 400**(서비스 교차검증).
+- `EventApiTest`(Testcontainers E2E) — 공개 목록(`year/month`·`startDate/endDate`, **여러 날 행사 겹침**, **경계 end_at 제외(off-by-one)**, tag 필터, `start_at ASC` 정렬),
   상세, 관리자 CRUD 인가(EVENT_WRITE 없으면 403)/404/409(낙관락), 페이지 봉투, **카드 description 제외**,
-  검증 오류(쌍 누락·`month` 범위 밖·`endDate<startDate`·`endAt<startAt`), **수정 응답 version으로 연속 PATCH 성공**.
+  검증 오류(쌍 누락·`year` 범위 밖·`month` 범위 밖·`endDate<startDate`·`endAt<=startAt`), **스칼라 수정 응답 version으로 연속 PATCH 성공**.
 
 ## 8. 변경 파일 요약
 

@@ -147,6 +147,11 @@ findReferences(long mediaId):
 | GET | `/api/notices` | 목록. `?page&size&sort=isPinned,desc&...` + `q`·`tagId`. `Page<NoticeCardResponse>`(content 제외). 기본 정렬 `isPinned DESC, createdAt DESC`. |
 | GET | `/api/notices/{id}` | 상세. 조회수 +1. `NoticeDetailResponse`. |
 
+> **목록 JSON 계약(리뷰 반영)**: 컨트롤러 반환 타입은 Java `Page<NoticeCardResponse>`지만, `WebConfig`의
+> `@EnableSpringDataWebSupport(pageSerializationMode = VIA_DTO)`가 이를 표준 envelope
+> `{ "content": [...], "page": { "size", "number", "totalElements", "totalPages" } }`로 직렬화한다(스펙 §5 목록 규약,
+> sermon과 동일). 즉 API 응답 계약은 envelope이며, `NoticeApiTest`가 `$.page.totalElements`·`$.content[*]`로 검증한다.
+
 ### 6.2 `AdminNoticeController` (`@PreAuthorize("hasAuthority('NOTICE_WRITE')")`)
 
 | 메서드 | 경로 | 응답 |
@@ -173,8 +178,9 @@ findReferences(long mediaId):
   원자성·0-row(삭제건 0 반환), Specification 필터(q·taggedIds 빈/실값). 정규식 경계는 provider 테스트 담당.
   > **부분 인덱스는 이 슬라이스가 검증하지 않는다(리뷰 반영)**: Flyway off·create-drop이라 마이그레이션 인덱스가
   > 생성되지 않고, `ddl-auto: validate`도 인덱스는 검사하지 않는다(sermon과 동일한 기존 한계). `idx_notices_pinned_created`
-  > 정의는 `V8` 마이그레이션이 소유하며, 인덱스 회귀 검증(Flyway-on + `pg_indexes` 조회)은 전 콘텐츠 도메인 공통
-  > 사안이라 본 이슈 범위 밖으로 둔다 — 슬라이스 테스트가 인덱스를 검증한다고 **오인하지 않도록** 명시.
+  > 정의는 `V8` 마이그레이션이 소유한다. 인덱스 회귀 검증은 별도 **`MigrationIndexTest`**(Flyway-on + `pg_indexes` 조회,
+  > 전 콘텐츠 도메인 공통)로 신설해 `idx_notices_pinned_created`·`idx_sermons_preached_at`·`uq_members_phone_active`의
+  > 부분 조건(`WHERE deleted_at IS NULL`)을 확인한다 — 슬라이스 테스트가 인덱스를 검증한다고 **오인하지 않도록** 분리.
 - `NoticeReferenceProviderTest` — 경계 안전 매칭(`42`가 `media:420` 미매칭), soft-deleted 제외, 다건 합산.
 - `NoticeServiceTest` — create/update/patch/delete, **version 충돌 → 409**, 조회수 증가, 태그 연결/정리,
   작성자 결합, **상단고정 토글(PATCH)**, **PATCH(tagIds 미제공) 응답 version이 N+1로 증가하고 그 version으로

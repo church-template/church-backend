@@ -4,11 +4,16 @@
 
 ## 전체 평가
 
-Request Changes
+~~Request Changes~~ → **해결 완료 (Resolved)** — 아래 Major 2 · Minor 1을 모두 구현에 반영함.
 
 - Critical: 0
-- Major: 2
-- Minor: 1
+- Major: 2 → **0** (반영)
+- Minor: 1 → **0** (반영)
+
+> **반영 요약 (구현 시점):**
+> - **Major(stale version):** `NoticeService.update/patch`에 변경 직후 `repository.flush()` 추가 → 응답 `version`이 post-increment. 회귀 가드: 단위(`verify(repository).flush()` / stale 경로 `never().flush()`) + E2E `patch_response_version_allows_immediate_next_edit`. 동일 결함이던 `SermonService`도 함께 수정(`fix : 설교 수정응답 version flush 정합 #13`).
+> - **Major(부분 인덱스 검증):** `NoticeRepositoryTest`는 인덱스 검증을 주장하지 않도록 정정하고, **별도 `MigrationIndexTest`**(Flyway-on + `pg_indexes`)로 `idx_notices_pinned_created`·`idx_sermons_preached_at`·`uq_members_phone_active`의 부분 조건(`WHERE deleted_at IS NULL`)을 검증.
+> - **Minor(조회수 0-row UPDATE→404):** 의도된 trade-off로 설계 문서 §5에 명시.
 
 ## Major
 

@@ -1,4 +1,4 @@
-package com.elipair.church.domain.sermon;
+package com.elipair.church.domain.notice;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -29,7 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
-class SermonApiTest {
+class NoticeApiTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -38,7 +38,7 @@ class SermonApiTest {
     private JwtTokenProvider provider;
 
     @Autowired
-    private SermonRepository sermonRepository;
+    private NoticeRepository noticeRepository;
 
     @Autowired
     private MemberRepository memberRepository;
@@ -54,7 +54,7 @@ class SermonApiTest {
 
     @AfterEach
     void cleanup() {
-        sermonRepository.deleteAll();
+        noticeRepository.deleteAll();
         memberRepository.deleteAll(memberRepository.findAll());
     }
 
@@ -65,20 +65,18 @@ class SermonApiTest {
     }
 
     private String adminToken() {
-        return token(authorId, "SERMON_WRITE");
+        return token(authorId, "NOTICE_WRITE");
     }
 
     private static final String CREATE_BODY = """
-            {"title":"산상수훈 강해 1","preacher":"김목사","series":"산상수훈","scripture":"마 5:1-12",
-             "content":"본문 ![](media:42)","videoUrl":"https://youtu.be/abc","audioUrl":null,
-             "preachedAt":"2026-06-01","tagIds":[]}
+            {"title":"2026 부활절 안내","content":"본문 ![](media:42)","isPinned":false,"tagIds":[]}
             """;
 
-    private long createSermon() throws Exception {
-        String json = mockMvc.perform(post("/api/admin/sermons")
+    private long createNotice(String body) throws Exception {
+        String json = mockMvc.perform(post("/api/admin/notices")
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(CREATE_BODY))
+                        .content(body))
                 .andExpect(status().isCreated())
                 .andReturn()
                 .getResponse()
@@ -87,15 +85,16 @@ class SermonApiTest {
     }
 
     @Test
-    void create_as_sermon_write_returns_201_with_author_and_zero_views() throws Exception {
-        mockMvc.perform(post("/api/admin/sermons")
+    void create_as_notice_write_returns_201_with_author_and_zero_views() throws Exception {
+        mockMvc.perform(post("/api/admin/notices")
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(CREATE_BODY))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").isNumber())
-                .andExpect(jsonPath("$.title").value("산상수훈 강해 1"))
+                .andExpect(jsonPath("$.title").value("2026 부활절 안내"))
                 .andExpect(jsonPath("$.content").value("본문 ![](media:42)"))
+                .andExpect(jsonPath("$.isPinned").value(false))
                 .andExpect(jsonPath("$.viewCount").value(0))
                 .andExpect(jsonPath("$.version").value(0))
                 .andExpect(jsonPath("$.author").value("관리목사"));
@@ -103,7 +102,7 @@ class SermonApiTest {
 
     @Test
     void create_anonymous_is_401() throws Exception {
-        mockMvc.perform(post("/api/admin/sermons")
+        mockMvc.perform(post("/api/admin/notices")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(CREATE_BODY))
                 .andExpect(status().isUnauthorized())
@@ -112,7 +111,7 @@ class SermonApiTest {
 
     @Test
     void create_without_permission_is_403() throws Exception {
-        mockMvc.perform(post("/api/admin/sermons")
+        mockMvc.perform(post("/api/admin/notices")
                         .header("Authorization", token(authorId, "MEDIA_MANAGE"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(CREATE_BODY))
@@ -122,8 +121,8 @@ class SermonApiTest {
 
     @Test
     void create_blank_title_is_400() throws Exception {
-        String bad = CREATE_BODY.replace("산상수훈 강해 1", "");
-        mockMvc.perform(post("/api/admin/sermons")
+        String bad = CREATE_BODY.replace("2026 부활절 안내", "");
+        mockMvc.perform(post("/api/admin/notices")
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(bad))
@@ -133,10 +132,10 @@ class SermonApiTest {
 
     @Test
     void public_list_paginates_and_omits_content() throws Exception {
-        createSermon();
-        createSermon();
+        createNotice(CREATE_BODY);
+        createNotice(CREATE_BODY);
 
-        mockMvc.perform(get("/api/sermons"))
+        mockMvc.perform(get("/api/notices"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.page.totalElements").value(2))
@@ -146,68 +145,83 @@ class SermonApiTest {
     }
 
     @Test
-    void public_list_filters_by_preacher() throws Exception {
-        createSermon(); // 김목사
-        mockMvc.perform(get("/api/sermons").param("preacher", "김목사"))
+    void public_list_orders_pinned_first() throws Exception {
+        // 고정 공지를 먼저(=더 오래된 created_at), 일반 공지를 나중(=더 최신)에 만든다.
+        createNotice("""
+                {"title":"고정공지","content":"c","isPinned":true,"tagIds":[]}
+                """);
+        createNotice("""
+                {"title":"일반공지","content":"c","isPinned":false,"tagIds":[]}
+                """);
+
+        // 기본 정렬 is_pinned DESC, created_at DESC → 더 오래됐어도 고정이 먼저.
+        mockMvc.perform(get("/api/notices"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].title").value("고정공지"))
+                .andExpect(jsonPath("$.content[0].isPinned").value(true))
+                .andExpect(jsonPath("$.content[1].title").value("일반공지"));
+    }
+
+    @Test
+    void public_list_filters_by_title_keyword() throws Exception {
+        createNotice(CREATE_BODY); // title: "2026 부활절 안내"
+
+        mockMvc.perform(get("/api/notices").param("q", "부활절"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements").value(1));
-        mockMvc.perform(get("/api/sermons").param("preacher", "없는목사"))
+        mockMvc.perform(get("/api/notices").param("q", "없는키워드"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements").value(0));
     }
 
     @Test
     void public_detail_increments_view_count() throws Exception {
-        long id = createSermon();
+        long id = createNotice(CREATE_BODY);
 
-        mockMvc.perform(get("/api/sermons/" + id))
+        mockMvc.perform(get("/api/notices/" + id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.viewCount").value(1));
-        mockMvc.perform(get("/api/sermons/" + id))
+        mockMvc.perform(get("/api/notices/" + id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.viewCount").value(2));
     }
 
     @Test
     void detail_unknown_is_404() throws Exception {
-        mockMvc.perform(get("/api/sermons/999999"))
+        mockMvc.perform(get("/api/notices/999999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
     }
 
     @Test
     void put_full_update_changes_fields_and_bumps_version() throws Exception {
-        long id = createSermon();
+        long id = createNotice(CREATE_BODY);
         String body = """
-                {"title":"수정된 제목","preacher":"이목사","series":null,"scripture":null,
-                 "content":"수정 본문","videoUrl":null,"audioUrl":null,"preachedAt":"2026-07-01",
-                 "tagIds":[],"version":0}
+                {"title":"수정된 제목","content":"수정 본문","isPinned":true,"tagIds":[],"version":0}
                 """;
 
-        mockMvc.perform(put("/api/admin/sermons/" + id)
+        mockMvc.perform(put("/api/admin/notices/" + id)
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("수정된 제목"))
-                .andExpect(jsonPath("$.preacher").value("이목사"))
-                .andExpect(jsonPath("$.series").doesNotExist())
+                .andExpect(jsonPath("$.isPinned").value(true))
                 .andExpect(jsonPath("$.version").value(1));
     }
 
     @Test
     void put_with_stale_version_is_409() throws Exception {
-        long id = createSermon();
+        long id = createNotice(CREATE_BODY);
         String v0 = """
-                {"title":"A","preacher":"김목사","series":null,"scripture":null,"content":"c",
-                 "videoUrl":null,"audioUrl":null,"preachedAt":"2026-07-01","tagIds":[],"version":0}
+                {"title":"A","content":"c","isPinned":false,"tagIds":[],"version":0}
                 """;
-        mockMvc.perform(put("/api/admin/sermons/" + id)
+        mockMvc.perform(put("/api/admin/notices/" + id)
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(v0))
                 .andExpect(status().isOk());
-        mockMvc.perform(put("/api/admin/sermons/" + id)
+        mockMvc.perform(put("/api/admin/notices/" + id)
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(v0))
@@ -216,26 +230,26 @@ class SermonApiTest {
     }
 
     @Test
-    void patch_partial_updates_only_given_field() throws Exception {
-        long id = createSermon();
+    void patch_toggles_pin_and_keeps_other_fields() throws Exception {
+        long id = createNotice(CREATE_BODY);
         String body = """
-                {"title":"부분수정","version":0}
+                {"isPinned":true,"version":0}
                 """;
 
-        mockMvc.perform(patch("/api/admin/sermons/" + id)
+        mockMvc.perform(patch("/api/admin/notices/" + id)
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title").value("부분수정"))
-                .andExpect(jsonPath("$.preacher").value("김목사"));
+                .andExpect(jsonPath("$.isPinned").value(true))
+                .andExpect(jsonPath("$.title").value("2026 부활절 안내"));
     }
 
     @Test
     void patch_response_version_allows_immediate_next_edit() throws Exception {
-        long id = createSermon();
+        long id = createNotice(CREATE_BODY);
         // 1차 PATCH(tagIds 미제공): version 0 → 응답 version은 1이어야 함(flush 반영, stale 409 회피 회귀 가드).
-        mockMvc.perform(patch("/api/admin/sermons/" + id)
+        mockMvc.perform(patch("/api/admin/notices/" + id)
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -243,8 +257,9 @@ class SermonApiTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(1));
+
         // 응답 version(1)으로 즉시 2차 수정 → stale 409가 아니라 200.
-        mockMvc.perform(patch("/api/admin/sermons/" + id)
+        mockMvc.perform(patch("/api/admin/notices/" + id)
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -257,21 +272,21 @@ class SermonApiTest {
 
     @Test
     void delete_soft_deletes_then_detail_404() throws Exception {
-        long id = createSermon();
+        long id = createNotice(CREATE_BODY);
 
-        mockMvc.perform(delete("/api/admin/sermons/" + id).header("Authorization", adminToken()))
+        mockMvc.perform(delete("/api/admin/notices/" + id).header("Authorization", adminToken()))
                 .andExpect(status().isNoContent());
-        mockMvc.perform(get("/api/sermons/" + id)).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/notices/" + id)).andExpect(status().isNotFound());
     }
 
     @Test
     void author_is_masked_when_member_withdrawn() throws Exception {
-        long id = createSermon();
+        long id = createNotice(CREATE_BODY);
         Member author = memberRepository.findById(authorId).orElseThrow();
         author.softDelete();
         memberRepository.saveAndFlush(author);
 
-        mockMvc.perform(get("/api/sermons/" + id))
+        mockMvc.perform(get("/api/notices/" + id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.author").value("(탈퇴한 사용자)"));
     }

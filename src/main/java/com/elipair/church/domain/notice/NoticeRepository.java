@@ -1,0 +1,28 @@
+package com.elipair.church.domain.notice;
+
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+public interface NoticeRepository extends JpaRepository<Notice, Long>, JpaSpecificationExecutor<Notice> {
+
+    Optional<Notice> findByIdAndDeletedAtIsNull(Long id);
+
+    /** 상세 조회 조회수 +1. 벌크 UPDATE라 @Version·감사필드를 건드리지 않는다(락 우회). clear로 L1 stale 방지. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update Notice n set n.viewCount = n.viewCount + 1 where n.id = :id and n.deletedAt is null")
+    int incrementViewCount(@Param("id") Long id);
+
+    /**
+     * 본문이 media:{id}를 참조하는 미삭제 공지(id·title). PG 정규식 ~ 로 경계 안전 매칭.
+     * pattern 예: "media:42($|[^0-9])" — 42가 media:420/421에 매칭되지 않는다.
+     */
+    @Query(
+            value = "select id as id, title as title from notices " + "where deleted_at is null and content ~ :pattern",
+            nativeQuery = true)
+    List<NoticeRefRow> findReferencesByMedia(@Param("pattern") String pattern);
+}

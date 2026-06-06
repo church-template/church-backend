@@ -23,7 +23,7 @@ Sermon은 기존에 깔려 있던 자산 3종의 **첫 사용처**이자, 재사
 | **조회수 증가** | 상세 GET마다 **원자적 `UPDATE view_count = view_count+1`** (별도 쿼리, `@Version` 우회) | 읽기 경로의 쓰기가 낙관락과 충돌하지 않아야 함. 엔티티 로드/세이브와 무관한 1줄 쿼리. notice 등 재사용. |
 | **검색 `?q=`** | `title + preacher + series + scripture` 에 `lower() LIKE` (본문 `content` 제외) | 카드 메타 필드만 검색. 인덱스 없는 TEXT 풀스캔 회피. 교회 규모에 충분. |
 | **작성자 표시** | member 도메인에 **재사용 컴포넌트** `AuthorDisplayService` | `ContentTagService`와 동일한 도메인 횡단 재사용 패턴. 탈퇴 마스킹·N+1 회피를 한 곳에서 보장하고 이후 4개 도메인이 상속. |
-| **미디어 참조 매칭** | **경계 안전**(PG 정규식 `media:{id}($|[^0-9])`) | 순진한 `LIKE '%media:42%'`는 `media:420`도 매칭 → 잘못된 삭제 차단. sermon이 첫 구현이라 전 도메인 선례. |
+| **미디어 참조 매칭** | **경계 안전**(PG 정규식 `media:{id}($\|[^0-9])`) | 순진한 `LIKE '%media:42%'`는 `media:420`도 매칭 → 잘못된 삭제 차단. sermon이 첫 구현이라 전 도메인 선례. |
 | **필드 셋** | **스펙 §5.5 전체 셋**(이슈 본문 그대로) | series·audio_url 포함, content는 마크다운 본문. |
 
 ## 2. 데이터 모델
@@ -88,7 +88,7 @@ CREATE INDEX idx_sermons_preached_at ON sermons (preached_at DESC) WHERE deleted
 
 - `preacher` — 일치(eq).
 - `series` — 일치(eq).
-- `from`/`to` — `preachedAt >= from`, `preachedAt < to.plusDays(1)`(해당 날짜 포함, 상한 배타).
+- `from`/`to` — `preachedAt >= from`, `preachedAt <= to`(양끝 날짜 포함; `preachedAt`이 DATE라 `< to.plusDays(1)`과 동치 — 구현은 `<=`로 통일).
 - `q` — `lower(title|preacher|series|scripture) LIKE %q%`의 OR 묶음.
 - `taggedIds` — **서비스가 미리 해석해 넘긴 id 목록**(`List<Long>`)을 `id IN (...)`로. `null`이면 술어 제외, 빈 리스트면 결과 없음(불가능 술어). Specification은 **순수 조건 빌더로 유지**하고 태그 id 해석은 서비스 책임 — `MediaSpecifications`와 동일 원칙(구현 책임 비혼합).
 

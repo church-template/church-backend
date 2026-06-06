@@ -71,4 +71,13 @@ class MigrationIndexTest {
                 .contains("start_at")
                 .contains("deleted_at IS NULL");
     }
+
+    @Test
+    void departments_sort_order_is_partial_on_active_rows() {
+        assertThat(indexDef("idx_departments_sort_order"))
+                .as("V10 부서 정렬 인덱스")
+                .isNotNull()
+                .contains("sort_order")
+                .contains("deleted_at IS NULL");
+    }
 }

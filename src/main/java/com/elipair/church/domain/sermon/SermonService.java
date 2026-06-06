@@ -103,6 +103,7 @@ public class SermonService {
                 req.audioUrl(),
                 req.preachedAt());
         contentTagService.replaceLinks(TYPE, id, req.tagIds());
+        repository.flush(); // 버전 UPDATE 즉시 반영 → 응답 version이 post-increment (Notice #13 리뷰 반영)
         return detail(sermon);
     }
 
@@ -122,6 +123,7 @@ public class SermonService {
         if (req.tagIds() != null) {
             contentTagService.replaceLinks(TYPE, id, req.tagIds());
         }
+        repository.flush(); // 태그 미변경 PATCH도 버전 증가를 응답에 반영 (Notice #13 리뷰 반영)
         return detail(sermon);
     }
 

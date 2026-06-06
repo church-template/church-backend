@@ -232,6 +232,30 @@ class SermonApiTest {
     }
 
     @Test
+    void patch_response_version_allows_immediate_next_edit() throws Exception {
+        long id = createSermon();
+        // 1차 PATCH(tagIds 미제공): version 0 → 응답 version은 1이어야 함(flush 반영, stale 409 회피 회귀 가드).
+        mockMvc.perform(patch("/api/admin/sermons/" + id)
+                        .header("Authorization", adminToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"1차수정","version":0}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(1));
+        // 응답 version(1)으로 즉시 2차 수정 → stale 409가 아니라 200.
+        mockMvc.perform(patch("/api/admin/sermons/" + id)
+                        .header("Authorization", adminToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"2차수정","version":1}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("2차수정"))
+                .andExpect(jsonPath("$.version").value(2));
+    }
+
+    @Test
     void delete_soft_deletes_then_detail_404() throws Exception {
         long id = createSermon();
 

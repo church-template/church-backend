@@ -74,6 +74,7 @@ class SermonServiceTest {
         service.update(10L, req);
 
         verify(contentTagService).replaceLinks(ContentResourceType.SERMON, 10L, List.of(5L));
+        verify(repository).flush();
     }
 
     @Test
@@ -87,6 +88,7 @@ class SermonServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
                         .isEqualTo(ErrorCode.OPTIMISTIC_LOCK_CONFLICT));
         verify(contentTagService, never()).replaceLinks(any(), any(), any());
+        verify(repository, never()).flush();
     }
 
     @Test
@@ -98,6 +100,7 @@ class SermonServiceTest {
         service.patch(10L, req);
 
         verify(contentTagService, never()).replaceLinks(any(), any(), any());
+        verify(repository).flush();
     }
 
     @Test
@@ -110,6 +113,7 @@ class SermonServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
                         .isEqualTo(ErrorCode.OPTIMISTIC_LOCK_CONFLICT));
         verify(contentTagService, never()).replaceLinks(any(), any(), any());
+        verify(repository, never()).flush();
     }
 
     @Test

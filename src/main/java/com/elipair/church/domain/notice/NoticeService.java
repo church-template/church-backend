@@ -11,8 +11,10 @@ import com.elipair.church.domain.tag.ContentTagService;
 import com.elipair.church.domain.tag.dto.TagResponse;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
+import com.elipair.church.global.viewcount.ViewCountStore;
 import java.util.List;
 import java.util.Map;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -32,14 +34,17 @@ public class NoticeService {
     private final NoticeRepository repository;
     private final ContentTagService contentTagService;
     private final AuthorDisplayService authorDisplayService;
+    private final ViewCountStore viewCountStore;
 
     public NoticeService(
             NoticeRepository repository,
             ContentTagService contentTagService,
-            AuthorDisplayService authorDisplayService) {
+            AuthorDisplayService authorDisplayService,
+            ViewCountStore viewCountStore) {
         this.repository = repository;
         this.contentTagService = contentTagService;
         this.authorDisplayService = authorDisplayService;
+        this.viewCountStore = viewCountStore;
     }
 
     public Page<NoticeCardResponse> list(String q, Long tagId, Pageable pageable) {
@@ -61,15 +66,16 @@ public class NoticeService {
                 authorMap.getOrDefault(n.getUpdatedBy(), AuthorDisplayService.UNKNOWN)));
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public NoticeDetailResponse get(Long id) {
-        repository.incrementViewCount(id); // 먼저 증가(clearAutomatically) → 아래 재조회가 +1 반영본을 읽음
         Notice notice = repository
                 .findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
-        return detail(notice);
+        long buffered = viewCountStore.increment(NoticeViewCountFlushTarget.NAMESPACE, id);
+        return detail(notice, notice.getViewCount() + buffered);
     }
 
+    @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public NoticeDetailResponse create(NoticeCreateRequest req) {
         Notice notice = repository.save(Notice.create(req.title(), req.content(), Boolean.TRUE.equals(req.isPinned())));
@@ -77,6 +83,7 @@ public class NoticeService {
         return detail(notice);
     }
 
+    @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public NoticeDetailResponse update(Long id, NoticeUpdateRequest req) {
         Notice notice = load(id);
@@ -87,6 +94,7 @@ public class NoticeService {
         return detail(notice);
     }
 
+    @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public NoticeDetailResponse patch(Long id, NoticePatchRequest req) {
         Notice notice = load(id);
@@ -99,6 +107,7 @@ public class NoticeService {
         return detail(notice);
     }
 
+    @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public void delete(Long id) {
         Notice notice = load(id);
@@ -119,12 +128,16 @@ public class NoticeService {
     }
 
     private NoticeDetailResponse detail(Notice n) {
+        return detail(n, n.getViewCount());
+    }
+
+    private NoticeDetailResponse detail(Notice n, long viewCount) {
         return new NoticeDetailResponse(
                 n.getId(),
                 n.getTitle(),
                 n.getContent(),
                 n.isPinned(),
-                n.getViewCount(),
+                viewCount,
                 n.getCreatedAt(),
                 n.getUpdatedAt(),
                 n.getVersion(),

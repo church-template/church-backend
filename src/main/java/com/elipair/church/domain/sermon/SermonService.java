@@ -11,9 +11,11 @@ import com.elipair.church.domain.tag.ContentTagService;
 import com.elipair.church.domain.tag.dto.TagResponse;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
+import com.elipair.church.global.viewcount.ViewCountStore;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -32,14 +34,17 @@ public class SermonService {
     private final SermonRepository repository;
     private final ContentTagService contentTagService;
     private final AuthorDisplayService authorDisplayService;
+    private final ViewCountStore viewCountStore;
 
     public SermonService(
             SermonRepository repository,
             ContentTagService contentTagService,
-            AuthorDisplayService authorDisplayService) {
+            AuthorDisplayService authorDisplayService,
+            ViewCountStore viewCountStore) {
         this.repository = repository;
         this.contentTagService = contentTagService;
         this.authorDisplayService = authorDisplayService;
+        this.viewCountStore = viewCountStore;
     }
 
     public Page<SermonCardResponse> list(
@@ -65,15 +70,16 @@ public class SermonService {
                 authorMap.getOrDefault(s.getUpdatedBy(), AuthorDisplayService.UNKNOWN)));
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public SermonDetailResponse get(Long id) {
-        repository.incrementViewCount(id); // 먼저 증가(clearAutomatically) → 아래 재조회가 +1 반영본을 읽음
         Sermon sermon = repository
                 .findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
-        return detail(sermon);
+        long buffered = viewCountStore.increment(SermonViewCountFlushTarget.NAMESPACE, id);
+        return detail(sermon, sermon.getViewCount() + buffered);
     }
 
+    @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public SermonDetailResponse create(SermonCreateRequest req) {
         Sermon sermon = repository.save(Sermon.create(
@@ -89,6 +95,7 @@ public class SermonService {
         return detail(sermon);
     }
 
+    @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public SermonDetailResponse update(Long id, SermonUpdateRequest req) {
         Sermon sermon = load(id);
@@ -107,6 +114,7 @@ public class SermonService {
         return detail(sermon);
     }
 
+    @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public SermonDetailResponse patch(Long id, SermonPatchRequest req) {
         Sermon sermon = load(id);
@@ -127,6 +135,7 @@ public class SermonService {
         return detail(sermon);
     }
 
+    @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public void delete(Long id) {
         Sermon sermon = load(id);
@@ -147,6 +156,10 @@ public class SermonService {
     }
 
     private SermonDetailResponse detail(Sermon s) {
+        return detail(s, s.getViewCount());
+    }
+
+    private SermonDetailResponse detail(Sermon s, long viewCount) {
         return new SermonDetailResponse(
                 s.getId(),
                 s.getTitle(),
@@ -157,7 +170,7 @@ public class SermonService {
                 s.getVideoUrl(),
                 s.getAudioUrl(),
                 s.getPreachedAt(),
-                s.getViewCount(),
+                viewCount,
                 s.getCreatedAt(),
                 s.getUpdatedAt(),
                 s.getVersion(),

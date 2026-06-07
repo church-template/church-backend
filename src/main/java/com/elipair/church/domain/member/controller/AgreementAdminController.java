@@ -2,6 +2,8 @@ package com.elipair.church.domain.member.controller;
 
 import com.elipair.church.domain.member.MemberService;
 import com.elipair.church.domain.member.dto.AgreementResetRequest;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -12,6 +14,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 약관 재동의 사이클 — 관리자 일괄 리셋(스펙 §5.2 방식 A). */
+@Tag(name = "약관(관리)", description = "약관 재동의 사이클 관리 API(스펙 §5.2). MEMBER_MANAGE 필요.")
 @RestController
 @RequestMapping("/api/admin/agreements")
 public class AgreementAdminController {
@@ -22,6 +25,9 @@ public class AgreementAdminController {
         this.memberService = memberService;
     }
 
+    @Operation(
+            summary = "동의 일괄 리셋",
+            description = "MEMBER_MANAGE 필요. 대상 회원들의 약관·개인정보 동의 플래그를 초기화. 다음 로그인 시 requiresAgreement=true로 재동의 유도.")
     @PostMapping("/reset")
     @PreAuthorize("hasAuthority('MEMBER_MANAGE')")
     @ResponseStatus(HttpStatus.OK)

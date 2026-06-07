@@ -13,6 +13,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -58,6 +59,17 @@ public class GlobalExceptionHandler {
             MaxUploadSizeExceededException e, HttpServletRequest request) {
         return ResponseEntity.status(ErrorCode.FILE_SIZE_EXCEEDED.getStatus())
                 .body(ErrorResponse.of(ErrorCode.FILE_SIZE_EXCEEDED, request.getRequestURI()));
+    }
+
+    /** @RequestParam/@PathVariable 타입 변환 실패(예: ?year=abc, ?version=abc) — 400 INVALID_INPUT_VALUE. */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(
+            MethodArgumentTypeMismatchException e, HttpServletRequest request) {
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.getStatus())
+                .body(ErrorResponse.of(
+                        ErrorCode.INVALID_INPUT_VALUE,
+                        "요청 파라미터 '%s'의 형식이 올바르지 않습니다".formatted(e.getName()),
+                        request.getRequestURI()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

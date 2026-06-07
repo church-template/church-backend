@@ -12,10 +12,10 @@ public interface SermonRepository extends JpaRepository<Sermon, Long>, JpaSpecif
 
     Optional<Sermon> findByIdAndDeletedAtIsNull(Long id);
 
-    /** 상세 조회 조회수 +1. 벌크 UPDATE라 @Version·감사필드를 건드리지 않는다(락 우회). clear로 L1 stale 방지. */
+    /** 플러시 잡이 누적 조회수를 +delta 반영. 벌크 UPDATE라 @Version·감사필드 미변경. clear로 L1 stale 방지. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("update Sermon s set s.viewCount = s.viewCount + 1 where s.id = :id and s.deletedAt is null")
-    int incrementViewCount(@Param("id") Long id);
+    @Query("update Sermon s set s.viewCount = s.viewCount + :delta where s.id = :id and s.deletedAt is null")
+    int incrementViewCountBy(@Param("id") Long id, @Param("delta") long delta);
 
     /**
      * 본문이 media:{id}를 참조하는 미삭제 설교(id·title). PG 정규식 ~ 로 경계 안전 매칭.

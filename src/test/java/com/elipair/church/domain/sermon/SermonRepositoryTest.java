@@ -48,26 +48,26 @@ class SermonRepositoryTest {
     }
 
     @Test
-    void incrementViewCount_is_atomic_and_skips_deleted() {
+    void incrementViewCountBy_adds_delta_and_skips_deleted() {
         Sermon s = repository.saveAndFlush(sermon("조회수"));
 
-        int updated = repository.incrementViewCount(s.getId());
+        int updated = repository.incrementViewCountBy(s.getId(), 5L);
 
         assertThat(updated).isEqualTo(1);
         assertThat(repository
                         .findByIdAndDeletedAtIsNull(s.getId())
                         .orElseThrow()
                         .getViewCount())
-                .isEqualTo(1L);
+                .isEqualTo(5L);
     }
 
     @Test
-    void incrementViewCount_returns_zero_for_deleted() {
+    void incrementViewCountBy_returns_zero_for_deleted() {
         Sermon deleted = sermon("삭제됨");
         deleted.softDelete();
         Sermon saved = repository.saveAndFlush(deleted);
 
-        assertThat(repository.incrementViewCount(saved.getId())).isZero();
+        assertThat(repository.incrementViewCountBy(saved.getId(), 3L)).isZero();
     }
 
     @Test

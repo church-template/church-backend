@@ -3,7 +3,7 @@ package com.elipair.church.domain.sermon;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.inOrder;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,18 +17,19 @@ import com.elipair.church.domain.tag.ContentResourceType;
 import com.elipair.church.domain.tag.ContentTagService;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
+import com.elipair.church.global.viewcount.ViewCountStore;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InOrder;
 
 class SermonServiceTest {
 
     private SermonRepository repository;
     private ContentTagService contentTagService;
     private AuthorDisplayService authorDisplayService;
+    private ViewCountStore viewCountStore;
     private SermonService service;
 
     @BeforeEach
@@ -36,7 +37,8 @@ class SermonServiceTest {
         repository = mock(SermonRepository.class);
         contentTagService = mock(ContentTagService.class);
         authorDisplayService = mock(AuthorDisplayService.class);
-        service = new SermonService(repository, contentTagService, authorDisplayService);
+        viewCountStore = mock(ViewCountStore.class);
+        service = new SermonService(repository, contentTagService, authorDisplayService, viewCountStore);
         when(contentTagService.getTags(any(), any())).thenReturn(List.of());
         when(authorDisplayService.displayName(any())).thenReturn("관리자");
     }
@@ -128,24 +130,22 @@ class SermonServiceTest {
     }
 
     @Test
-    void get_unknown_throws_404() {
-        when(repository.incrementViewCount(99L)).thenReturn(0);
+    void get_unknown_throws_404_without_counting() {
         when(repository.findByIdAndDeletedAtIsNull(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.get(99L))
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
                         .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND));
+        verify(viewCountStore, never()).increment(any(), anyLong());
     }
 
     @Test
-    void get_increments_view_count_before_loading() {
+    void get_buffers_view_and_returns_live_count() {
         Sermon s = mockSermonWithVersion(0L);
+        when(s.getViewCount()).thenReturn(5L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(s));
+        when(viewCountStore.increment("sermon", 10L)).thenReturn(3L);
 
-        service.get(10L);
-
-        InOrder order = inOrder(repository);
-        order.verify(repository).incrementViewCount(10L);
-        order.verify(repository).findByIdAndDeletedAtIsNull(10L);
+        assertThat(service.get(10L).viewCount()).isEqualTo(8L); // DB 5 + 버퍼 3
     }
 }

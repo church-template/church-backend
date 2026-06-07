@@ -13,7 +13,9 @@ import com.elipair.church.global.exception.ErrorCode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,10 +56,28 @@ public class EventService {
                 tagsMap.getOrDefault(e.getId(), List.of())));
     }
 
+    /** 메인페이지용 다가오는 일정 카드 N건(스펙 §5.9). start_at >= now, start_at ASC. */
+    public List<EventCardResponse> upcoming(int limit) {
+        List<Event> events = repository.findUpcoming(LocalDateTime.now(), PageRequest.of(0, limit));
+        List<Long> ids = events.stream().map(Event::getId).toList();
+        Map<Long, List<TagResponse>> tagsMap = contentTagService.getTagsByResources(TYPE, ids);
+        return events.stream()
+                .map(e -> new EventCardResponse(
+                        e.getId(),
+                        e.getTitle(),
+                        e.getLocation(),
+                        e.getStartAt(),
+                        e.getEndAt(),
+                        e.isAllDay(),
+                        tagsMap.getOrDefault(e.getId(), List.of())))
+                .toList();
+    }
+
     public EventDetailResponse get(Long id) {
         return detail(load(id));
     }
 
+    @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public EventDetailResponse create(EventCreateRequest req) {
         Event event = repository.save(Event.create(
@@ -71,6 +91,7 @@ public class EventService {
         return detail(event);
     }
 
+    @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public EventDetailResponse update(Long id, EventUpdateRequest req) {
         Event event = load(id);
@@ -87,6 +108,7 @@ public class EventService {
         return detail(event);
     }
 
+    @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public EventDetailResponse patch(Long id, EventPatchRequest req) {
         Event event = load(id);
@@ -104,6 +126,7 @@ public class EventService {
         return detail(event);
     }
 
+    @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public void delete(Long id) {
         Event event = load(id);

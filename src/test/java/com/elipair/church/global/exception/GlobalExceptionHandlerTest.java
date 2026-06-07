@@ -69,4 +69,11 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.errorCode").value("DUPLICATE_RESOURCE"))
                 .andExpect(jsonPath("$.detail").value("이미 존재하는 리소스입니다"));
     }
+
+    @Test
+    void type_mismatch_param_maps_to_invalid_input_value() throws Exception {
+        mockMvc.perform(get("/test/type-mismatch").param("value", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
 }

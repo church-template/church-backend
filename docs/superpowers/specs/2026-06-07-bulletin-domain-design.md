@@ -123,11 +123,9 @@ select id as id, title as title from bulletins where media_id = :mediaId and del
 | PATCH | `/api/admin/bulletins/{id}` | `version`(필수), `title?`, `serviceDate?`, `file?`/`mediaId?`(최대 하나) | 200 + Detail |
 | DELETE | `/api/admin/bulletins/{id}` | — | 204 |
 
-멀티파트라 스칼라 필드는 `@RequestParam`(날짜는 `@DateTimeFormat(iso=DATE)`), `file`은 `@RequestParam MultipartFile`(갤러리/미디어 컨트롤러 관례 일치). 바인딩 단계 필수성:
-- POST: `title` `required=true`, `serviceDate` `required=true`, `file`/`mediaId` `required=false`.
-- PATCH: `version` `required=true`, 나머지(`title`/`serviceDate`/`file`/`mediaId`) `required=false`(부분 수정).
+멀티파트라 스칼라 필드는 전부 `@RequestParam(required=false)` 자연 타입으로 받고(날짜는 `@DateTimeFormat(iso=DATE)`), `file`은 `@RequestParam MultipartFile`(갤러리/미디어 컨트롤러 관례 일치). POST/PATCH 모두 동일하며, 필수성(`title`·`serviceDate`·PATCH의 `version`)·공백·길이·XOR·non-empty file은 **서비스에서 `uploadPdf` 호출 이전에** 검증한다(§6.1 — 고아 파일 방지). 검증 실패는 모두 `INVALID_INPUT_VALUE`(400).
 
-`required=true`는 누락·타입불일치를 바인딩 단계에서 400으로 막지만 **빈 문자열·길이·XOR·non-empty file은 못 막는다**. 이들 + 비즈니스 검증은 **서비스에서 `uploadPdf` 호출 이전에** 수행한다(§6.1 — 고아 파일 방지). 검증 실패는 모두 `INVALID_INPUT_VALUE`(400).
+`required=true`를 쓰지 않는 이유: `GlobalExceptionHandler`에 `MissingServletRequestParameterException` 핸들러가 없어 `required=true` 누락은 catch-all→**500**이 된다. `required=false`+서비스 검증이면 누락도 null→서비스 400으로 일관된다. (malformed 타입 바인딩(예: `serviceDate=garbage`)은 `MethodArgumentTypeMismatchException`→500 — 기존 갤러리/미디어 컨트롤러와 동일한 기수용 동작, 후속 개선 후보.)
 
 ---
 

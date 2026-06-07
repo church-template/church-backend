@@ -18,7 +18,8 @@ final class GalleryAlbumSpecifications {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.isNull(root.get("deletedAt")));
             if (taggedIds != null) {
-                predicates.add(taggedIds.isEmpty() ? cb.disjunction() : root.get("id").in(taggedIds));
+                predicates.add(
+                        taggedIds.isEmpty() ? cb.disjunction() : root.get("id").in(taggedIds));
             }
             return cb.and(predicates.toArray(new Predicate[0]));
         };

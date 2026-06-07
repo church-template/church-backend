@@ -33,6 +33,7 @@
 V10(departments)이 마지막 → 갤러리는 **V11**. 컬럼·인덱스 관례는 V7~V10을 따른다.
 
 ### gallery_albums (`BaseEntity` 상속)
+
 | 컬럼 | 타입 | 비고 |
 |---|---|---|
 | id | BIGINT PK (IDENTITY) | |
@@ -44,6 +45,7 @@ V10(departments)이 마지막 → 갤러리는 **V11**. 컬럼·인덱스 관례
 | version | BIGINT NOT NULL DEFAULT 0 | 낙관락 |
 
 ### gallery_photos (경량 — `BaseTimeEntity`, `created_at`만)
+
 | 컬럼 | 타입 | 비고 |
 |---|---|---|
 | id | BIGINT PK (IDENTITY) | |
@@ -106,6 +108,7 @@ WHERE p.media_id = :mediaId AND a.deleted_at IS NULL
 | GET | `/api/gallery/albums/{id}` | `GalleryAlbumDetailResponse` (사진 목록 포함) |
 
 ### 4.2 관리 — `AdminGalleryController` (`@PreAuthorize("hasAuthority('GALLERY_WRITE')")`)
+
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | POST | `/api/admin/gallery/albums` | 앨범 생성 (201, `tagIds` 연결) |

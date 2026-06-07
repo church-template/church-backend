@@ -89,4 +89,26 @@ class MigrationIndexTest {
                 .contains("created_at")
                 .contains("deleted_at IS NULL");
     }
+
+    @Test
+    void bulletins_service_date_is_partial_on_active_rows() {
+        assertThat(indexDef("idx_bulletins_service_date"))
+                .as("V12 주보 목록 인덱스")
+                .isNotNull()
+                .contains("service_date")
+                .contains("deleted_at IS NULL");
+    }
+
+    @Test
+    void bulletins_media_id_fk_is_on_delete_set_null() {
+        List<?> rules = em.createNativeQuery(
+                        "select rc.delete_rule from information_schema.referential_constraints rc "
+                                + "join information_schema.key_column_usage kcu "
+                                + "  on kcu.constraint_name = rc.constraint_name "
+                                + "  and kcu.constraint_schema = rc.constraint_schema "
+                                + "where kcu.table_name = 'bulletins' and kcu.column_name = 'media_id'")
+                .getResultList();
+        assertThat(rules).as("V12 주보 media_id FK 존재").hasSize(1);
+        assertThat((String) rules.get(0)).as("ON DELETE SET NULL").isEqualTo("SET NULL");
+    }
 }

@@ -13,8 +13,8 @@ public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecific
 
     Optional<Event> findByIdAndDeletedAtIsNull(Long id);
 
-    /** 다가오는 일정(start_at >= now, 미삭제, start_at ASC). idx_events_start_at 부분인덱스 활용. */
-    @Query("select e from Event e where e.startAt >= :now and e.deletedAt is null order by e.startAt asc")
+    /** 다가오는 일정(start_at >= now, 미삭제, start_at ASC). 동일 start_at 시 id ASC로 결정적 정렬. idx_events_start_at 활용. */
+    @Query("select e from Event e where e.startAt >= :now and e.deletedAt is null order by e.startAt asc, e.id asc")
     List<Event> findUpcoming(@Param("now") LocalDateTime now, Pageable pageable);
 
     /**

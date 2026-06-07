@@ -33,6 +33,12 @@ public class ViewCountStore {
         return value == null ? 0L : value;
     }
 
+    /** 지정 delta만큼 버퍼 증가. 플러시(drain) 후 DB 반영 실패 시 드레인분을 버퍼에 되돌리는 복구용. */
+    public long incrementBy(String namespace, long id, long delta) {
+        Long value = redis.opsForValue().increment(key(namespace, id), delta);
+        return value == null ? 0L : value;
+    }
+
     /** 해당 namespace의 모든 버퍼를 원자적으로 비우고(id → delta) 반환. */
     public Map<Long, Long> drain(String namespace) {
         String prefix = PREFIX + namespace + ":";

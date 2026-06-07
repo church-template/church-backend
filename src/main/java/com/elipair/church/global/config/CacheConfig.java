@@ -10,6 +10,8 @@ import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
 
 /**
  * Redis 캐시 추상화(스펙 §9). /api/main을 @Cacheable, 콘텐츠 CUD 시 @CacheEvict로 무효화.
@@ -28,14 +30,20 @@ public class CacheConfig {
 
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
-        // enableUnsafeDefaultTyping: 값에 @class 타입정보를 심어 final record(MainResponse)까지 정확히 역직렬화한다.
-        // 캐시는 우리 코드가 직렬화한 값만 담는 내부 저장소이므로(외부 입력 역직렬화 아님) 허용 가능한 설정이다.
+        // 값에 @class 타입정보를 심어 final record(MainResponse)까지 정확히 역직렬화하되,
+        // PolymorphicTypeValidator로 허용 타입을 allowlist 제한한다(임의 타입 역직렬화 가젯 경로 차단 — 보안 하드닝).
+        // 캐시 값(MainResponse + 카드 DTO + 컬렉션 + 시간 타입)이 쓰는 패키지만 허용한다.
+        PolymorphicTypeValidator typeValidator = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("com.elipair.church.")
+                .allowIfSubType("java.util.")
+                .allowIfSubType("java.time.")
+                .build();
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofSeconds(ttlSeconds))
                 .disableCachingNullValues()
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(
                         GenericJacksonJsonRedisSerializer.builder()
-                                .enableUnsafeDefaultTyping()
+                                .enableDefaultTyping(typeValidator)
                                 .build()));
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(config)

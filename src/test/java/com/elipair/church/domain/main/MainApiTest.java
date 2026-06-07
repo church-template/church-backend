@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -38,8 +39,12 @@ class MainApiTest {
     @Autowired
     private EventRepository eventRepository;
 
+    @Autowired
+    private CacheManager cacheManager;
+
     @AfterEach
     void cleanup() {
+        cacheManager.getCache("main").clear();
         sermonRepository.deleteAll();
         noticeRepository.deleteAll();
         eventRepository.deleteAll();

@@ -30,6 +30,7 @@
 ## 파일 구조 (생성/수정 맵)
 
 **생성:**
+
 | 파일 | 책임 |
 |---|---|
 | `domain/main/MainController.java` | `GET /api/main` 공개 엔드포인트 |
@@ -45,6 +46,7 @@
 | 테스트들 | 아래 각 Task에 명시 |
 
 **수정:**
+
 | 파일 | 변경 |
 |---|---|
 | `docker-compose.yml` | backend env에 `ADMIN_*`·`CACHE_TTL`·`VIEW_FLUSH_INTERVAL` |
@@ -1384,7 +1386,7 @@ view:
 
 `.env.example`의 `SWAGGER_ENABLED=false` 줄 아래(또는 ADMIN 블록 위)에 추가:
 
-```
+```bash
 # 캐시/조회수
 CACHE_TTL=60                 # 캐시 TTL(초). /api/main·설교 목록 첫 페이지
 VIEW_FLUSH_INTERVAL=60000    # 조회수 버퍼 → DB 반영 주기(밀리초)

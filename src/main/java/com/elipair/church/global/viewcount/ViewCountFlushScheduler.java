@@ -25,10 +25,20 @@ public class ViewCountFlushScheduler {
     @Scheduled(fixedDelayString = "${view.flush-interval:60000}")
     public void flush() {
         for (ViewCountFlushTarget target : targets) {
-            Map<Long, Long> deltas = store.drain(target.namespace());
-            if (!deltas.isEmpty()) {
+            String namespace = target.namespace();
+            Map<Long, Long> deltas = store.drain(namespace);
+            if (deltas.isEmpty()) {
+                continue;
+            }
+            try {
                 target.applyDeltas(deltas);
-                log.debug("조회수 플러시: namespace={}, rows={}", target.namespace(), deltas.size());
+                log.debug("조회수 플러시: namespace={}, rows={}", namespace, deltas.size());
+            } catch (Exception e) {
+                // 반영 실패 시 드레인분을 버퍼에 재적재해 다음 주기에 재시도(유실 방지).
+                // applyDeltas는 @Transactional이라 실패 시 롤백 → 부분커밋 없음 → 전량 재적재가 안전.
+                // try/catch로 target을 격리해 한 도메인 실패가 다른 도메인 플러시를 막지 않게 한다.
+                deltas.forEach((id, delta) -> store.incrementBy(namespace, id, delta));
+                log.error("조회수 플러시 실패 — 버퍼 재적재: namespace={}, rows={}", namespace, deltas.size(), e);
             }
         }
     }

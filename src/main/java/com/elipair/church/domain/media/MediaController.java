@@ -1,5 +1,7 @@
 package com.elipair.church.domain.media;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.nio.charset.StandardCharsets;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 공개 파일 서빙(스펙 §5.10): 본문 이미지 렌더·PDF 열람용. 인증 불필요(경로 3분법의 공개 갈래).
  * mime_type 그대로 Content-Type을 세팅하되, nosniff로 브라우저 MIME 스니핑 기반 저장형 XSS를 차단한다.
  */
+@Tag(name = "미디어", description = "미디어 파일 공개 서빙 API(스펙 §5.10)")
 @RestController
 public class MediaController {
 
@@ -23,6 +26,10 @@ public class MediaController {
         this.service = service;
     }
 
+    @Operation(
+            summary = "파일 서빙(공개)",
+            description =
+                    "공개. 본문 이미지 렌더·PDF 열람용. mime_type을 Content-Type으로 그대로 반환하며 X-Content-Type-Options: nosniff로 MIME 스니핑 XSS를 차단한다.")
     @GetMapping("/api/media/{id}")
     public ResponseEntity<Resource> serve(@PathVariable Long id) {
         MediaContent content = service.serve(id);

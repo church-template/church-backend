@@ -92,8 +92,7 @@ class GalleryApiTest {
 
     private String token(String... authorities) {
         return "Bearer "
-                + provider.issueAccess(
-                        new MemberPrincipal(adminId, "uuid-x", "사용자", 100), null, List.of(authorities));
+                + provider.issueAccess(new MemberPrincipal(adminId, "uuid-x", "사용자", 100), null, List.of(authorities));
     }
 
     private long createAlbum(String title, String description) throws Exception {
@@ -232,8 +231,8 @@ class GalleryApiTest {
     void add_photos_rejects_non_image_existing_media_400() throws Exception {
         long albumId = createAlbum("앨범", "본문");
         long pdfId = mediaRepository
-                .saveAndFlush(
-                        com.elipair.church.domain.media.Media.create("b.pdf", "p/b.pdf", "application/pdf", 1L, adminId))
+                .saveAndFlush(com.elipair.church.domain.media.Media.create(
+                        "b.pdf", "p/b.pdf", "application/pdf", 1L, adminId))
                 .getId();
 
         mockMvc.perform(multipart("/api/admin/gallery/albums/" + albumId + "/photos")

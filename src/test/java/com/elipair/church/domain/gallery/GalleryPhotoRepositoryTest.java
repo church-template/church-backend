@@ -59,7 +59,8 @@ class GalleryPhotoRepositoryTest {
 
         photoRepository.deleteByAlbumId(albumId);
 
-        assertThat(photoRepository.findByAlbumIdOrderBySortOrderAscIdAsc(albumId)).isEmpty();
+        assertThat(photoRepository.findByAlbumIdOrderBySortOrderAscIdAsc(albumId))
+                .isEmpty();
     }
 
     @Test

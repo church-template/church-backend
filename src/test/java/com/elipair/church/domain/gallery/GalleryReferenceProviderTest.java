@@ -56,7 +56,8 @@ class GalleryReferenceProviderTest {
 
     @Test
     void photo_provider_surfaces_owning_album() {
-        Long albumId = albumRepository.saveAndFlush(GalleryAlbum.create("사진앨범", "본문")).getId();
+        Long albumId =
+                albumRepository.saveAndFlush(GalleryAlbum.create("사진앨범", "본문")).getId();
         photoRepository.saveAndFlush(GalleryPhoto.create(albumId, 42L, 0));
 
         List<ContentRef> refs = photoProvider.findReferences(42);

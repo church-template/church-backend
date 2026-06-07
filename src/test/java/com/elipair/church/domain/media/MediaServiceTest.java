@@ -231,4 +231,64 @@ class MediaServiceTest {
                 .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
         verify(repository, never()).findAllById(any());
     }
+
+    @Test
+    void uploadPdf_stores_pdf_and_returns_response() {
+        MockMultipartFile file = new MockMultipartFile("file", "b.pdf", "application/octet-stream", PDF);
+        when(fileStorage.store(file)).thenReturn("2026/06/b.pdf");
+        when(repository.save(any(Media.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        MediaResponse res = service(List.of()).uploadPdf(file, 7L);
+
+        assertThat(res.mimeType()).isEqualTo("application/pdf");
+        verify(repository).save(any(Media.class));
+    }
+
+    @Test
+    void uploadPdf_rejects_image_before_storing() {
+        MockMultipartFile file = new MockMultipartFile("file", "p.jpg", "application/pdf", JPEG);
+
+        assertThatThrownBy(() -> service(List.of()).uploadPdf(file, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+
+        verifyNoInteractions(fileStorage); // 저장 전 거부 → 고아 파일 없음
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void requirePdf_passes_when_media_is_pdf() {
+        when(repository.findById(3L)).thenReturn(Optional.of(Media.create("b.pdf", "p", "application/pdf", 1L, 1L)));
+
+        service(List.of()).requirePdf(3L); // 예외 없음
+    }
+
+    @Test
+    void requirePdf_throws_404_when_missing() {
+        when(repository.findById(3L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service(List.of()).requirePdf(3L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+
+    @Test
+    void requirePdf_throws_400_when_media_is_image() {
+        when(repository.findById(3L)).thenReturn(Optional.of(Media.create("a.jpg", "p", "image/jpeg", 1L, 1L)));
+
+        assertThatThrownBy(() -> service(List.of()).requirePdf(3L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    @Test
+    void requirePdf_throws_400_when_null() {
+        assertThatThrownBy(() -> service(List.of()).requirePdf(null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+    }
 }

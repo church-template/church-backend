@@ -65,6 +65,27 @@ public class MediaService {
         return persist(file, mimeType, uploaderId);
     }
 
+    /** 주보 전용 — 저장 전에 PDF 여부를 확정해 비PDF는 파일을 쓰지 않고 거부(고아 파일 차단, 설계 §6.1). */
+    @Transactional
+    public MediaResponse uploadPdf(MultipartFile file, Long uploaderId) {
+        String mimeType = detectMime(file);
+        if (!mimeType.equals("application/pdf")) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "PDF 파일만 업로드할 수 있습니다");
+        }
+        return persist(file, mimeType, uploaderId);
+    }
+
+    /** 기존 라이브러리에서 고른 mediaId가 존재하고 PDF인지 검증(설계 §6.1). */
+    public void requirePdf(Long mediaId) {
+        if (mediaId == null) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "mediaId는 필수입니다");
+        }
+        Media media = findById(mediaId); // 미존재 시 RESOURCE_NOT_FOUND
+        if (!media.getMimeType().equals("application/pdf")) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "PDF 미디어만 연결할 수 있습니다");
+        }
+    }
+
     /** 기존 라이브러리에서 고른 mediaIds가 모두 존재하고 이미지인지 검증(설계 §7). 빈 입력은 무검증 통과. */
     public void requireImages(Collection<Long> mediaIds) {
         if (mediaIds == null || mediaIds.isEmpty()) {

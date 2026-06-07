@@ -103,7 +103,8 @@ class GalleryPhotoServiceTest {
                 .requireImages(List.of(5L));
 
         assertThatThrownBy(() -> service.addPhotos(1L, null, List.of(5L), 7L))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
         verify(photoRepository, never()).save(any());
     }
 

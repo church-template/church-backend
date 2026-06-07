@@ -155,4 +155,80 @@ class MediaServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
     }
+
+    private static final byte[] JPEG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 1, 2, 3, 4};
+    private static final byte[] PDF = {0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34, 10, 11, 12, 13};
+
+    @Test
+    void uploadImage_stores_image_and_returns_response() {
+        MockMultipartFile file = new MockMultipartFile("file", "p.jpg", "application/octet-stream", JPEG);
+        when(fileStorage.store(file)).thenReturn("2026/06/x.jpg");
+        when(repository.save(any(Media.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        MediaResponse res = service(List.of()).uploadImage(file, 7L);
+
+        assertThat(res.mimeType()).isEqualTo("image/jpeg");
+        verify(repository).save(any(Media.class));
+    }
+
+    @Test
+    void uploadImage_rejects_pdf_before_storing() {
+        MockMultipartFile file = new MockMultipartFile("file", "doc.pdf", "image/jpeg", PDF);
+
+        assertThatThrownBy(() -> service(List.of()).uploadImage(file, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+
+        verifyNoInteractions(fileStorage); // 저장 전 거부 → 고아 파일 없음
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void requireImages_passes_when_all_are_images() {
+        when(repository.findAllById(List.of(1L, 2L)))
+                .thenReturn(List.of(
+                        Media.create("a.jpg", "p1", "image/jpeg", 1L, 1L),
+                        Media.create("b.png", "p2", "image/png", 1L, 1L)));
+
+        service(List.of()).requireImages(List.of(1L, 2L)); // 예외 없음
+    }
+
+    @Test
+    void requireImages_throws_404_when_some_missing() {
+        when(repository.findAllById(List.of(1L, 2L)))
+                .thenReturn(List.of(Media.create("a.jpg", "p1", "image/jpeg", 1L, 1L)));
+
+        assertThatThrownBy(() -> service(List.of()).requireImages(List.of(1L, 2L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+
+    @Test
+    void requireImages_throws_400_when_a_pdf_is_included() {
+        when(repository.findAllById(List.of(1L)))
+                .thenReturn(List.of(Media.create("d.pdf", "p", "application/pdf", 1L, 1L)));
+
+        assertThatThrownBy(() -> service(List.of()).requireImages(List.of(1L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    @Test
+    void requireImages_noop_on_empty() {
+        service(List.of()).requireImages(List.of()); // 예외 없음, 조회 안 함
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void requireImages_rejects_null_element_before_db_lookup() {
+        // null 원소는 DB 조회 전에 400으로 정규화(findAllById의 프레임워크 예외로 5xx 누수 방지).
+        assertThatThrownBy(() -> service(List.of()).requireImages(java.util.Arrays.asList(5L, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+        verify(repository, never()).findAllById(any());
+    }
 }

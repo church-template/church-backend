@@ -80,4 +80,13 @@ class MigrationIndexTest {
                 .contains("sort_order")
                 .contains("deleted_at IS NULL");
     }
+
+    @Test
+    void gallery_albums_created_at_is_partial_on_active_rows() {
+        assertThat(indexDef("idx_gallery_albums_created_at"))
+                .as("V11 갤러리 앨범 목록 인덱스")
+                .isNotNull()
+                .contains("created_at")
+                .contains("deleted_at IS NULL");
+    }
 }

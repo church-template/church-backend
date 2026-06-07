@@ -37,5 +37,10 @@ class ExceptionTestController {
         // 검증 통과 시 동작 없음
     }
 
+    @GetMapping("/test/type-mismatch")
+    void typeMismatch(@org.springframework.web.bind.annotation.RequestParam int value) {
+        // value 변환 실패 시 MethodArgumentTypeMismatchException 발생
+    }
+
     record SampleRequest(@NotBlank String name) {}
 }

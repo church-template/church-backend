@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.core.io.Resource;
@@ -50,7 +51,37 @@ public class MediaService {
 
     @Transactional
     public MediaResponse upload(MultipartFile file, Long uploaderId) {
-        String mimeType = detectMime(file); // 헤더 위조 무력화: 저장 mime_type은 스니핑 결과
+        return persist(file, detectMime(file), uploaderId);
+    }
+
+    /** 갤러리 사진 전용 — 저장 전에 이미지 여부를 확정해 비이미지는 파일을 쓰지 않고 거부(고아 파일 차단, 설계 §7). */
+    @Transactional
+    public MediaResponse uploadImage(MultipartFile file, Long uploaderId) {
+        String mimeType = detectMime(file);
+        if (!mimeType.startsWith("image/")) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "이미지 파일만 업로드할 수 있습니다");
+        }
+        return persist(file, mimeType, uploaderId);
+    }
+
+    /** 기존 라이브러리에서 고른 mediaIds가 모두 존재하고 이미지인지 검증(설계 §7). 빈 입력은 무검증 통과. */
+    public void requireImages(Collection<Long> mediaIds) {
+        if (mediaIds == null || mediaIds.isEmpty()) {
+            return;
+        }
+        List<Long> distinct = mediaIds.stream().distinct().toList();
+        List<Media> found = repository.findAllById(distinct);
+        if (found.size() != distinct.size()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        for (Media media : found) {
+            if (!media.getMimeType().startsWith("image/")) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "이미지 미디어만 추가할 수 있습니다");
+            }
+        }
+    }
+
+    private MediaResponse persist(MultipartFile file, String mimeType, Long uploaderId) {
         String storedPath = fileStorage.store(file);
         try {
             String filename = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "upload";

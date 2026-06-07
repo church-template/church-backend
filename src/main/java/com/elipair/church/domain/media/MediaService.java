@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -68,6 +69,9 @@ public class MediaService {
     public void requireImages(Collection<Long> mediaIds) {
         if (mediaIds == null || mediaIds.isEmpty()) {
             return;
+        }
+        if (mediaIds.stream().anyMatch(Objects::isNull)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "mediaIds에는 null을 포함할 수 없습니다");
         }
         List<Long> distinct = mediaIds.stream().distinct().toList();
         List<Media> found = repository.findAllById(distinct);

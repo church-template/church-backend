@@ -221,4 +221,14 @@ class MediaServiceTest {
         service(List.of()).requireImages(List.of()); // 예외 없음, 조회 안 함
         verifyNoInteractions(repository);
     }
+
+    @Test
+    void requireImages_rejects_null_element_before_db_lookup() {
+        // null 원소는 DB 조회 전에 400으로 정규화(findAllById의 프레임워크 예외로 5xx 누수 방지).
+        assertThatThrownBy(() -> service(List.of()).requireImages(java.util.Arrays.asList(5L, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+        verify(repository, never()).findAllById(any());
+    }
 }

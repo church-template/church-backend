@@ -28,7 +28,7 @@ public class NoticeController {
                     공지 카드 목록을 검색·페이지네이션으로 조회한다(고정글 우선 정렬).
 
                     - 인증(JWT): 불필요
-                    - 요청 파라미터: `q` — 제목/내용 검색어; `tagId` — 태그 필터; `page`·`size`·`sort` — 페이지네이션(기본 `isPinned,createdAt` 모두 desc → 고정글 우선·최신순)
+                    - 요청 파라미터: `q` — 제목 검색어(제목만 매칭); `tagId` — 태그 필터; `page`·`size`·`sort` — 페이지네이션(기본 `isPinned,createdAt` 모두 desc → 고정글 우선·최신순)
                     - 반환값: `Page<NoticeCardResponse>` — 카드 메타만(본문 `content` 제외)·페이지네이션
                     """)
     @GetMapping("/api/notices")

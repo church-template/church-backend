@@ -31,25 +31,55 @@ public class AdminEventController {
         this.service = service;
     }
 
-    @Operation(summary = "일정 등록", description = "EVENT_WRITE 필요. tagIds로 태그 연결.")
+    @Operation(summary = "일정 등록", description = """
+                    새 일정을 생성한다.
+
+                    - 인증(JWT): 필요 — `EVENT_WRITE`
+                    - 요청 본문: `EventCreateRequest` — 제목·description·장소·시작/종료 일시·종일(미지정 false)·`tagIds`; 종료는 시작보다 엄격히 이후 또는 null(점 이벤트)
+                    - 반환값: `EventDetailResponse` — 생성된 일정 상세(201)
+                    - 부수효과: `tagIds`로 태그 연결 · 메인 캐시(main) 무효화
+                    """)
     @PostMapping("/api/admin/events")
     public ResponseEntity<EventDetailResponse> create(@Valid @RequestBody EventCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
-    @Operation(summary = "일정 전체 수정", description = "EVENT_WRITE. 낙관락(version) 필요, 충돌 시 409.")
+    @Operation(summary = "일정 전체 수정", description = """
+                    일정 전체 교체(PUT). 제공한 값으로 모든 필드를 덮어쓴다.
+
+                    - 인증(JWT): 필요 — `EVENT_WRITE`
+                    - 경로 변수: `id` — 수정할 일정 ID
+                    - 요청 본문: `EventUpdateRequest` — 제목·description·장소·시작/종료 일시·종일·`tagIds`·`version`(필수); 종료는 시작보다 엄격히 이후 또는 null
+                    - 반환값: `EventDetailResponse` — 수정된 일정 상세
+                    - 부수효과: `version` 불일치 시 409 OPTIMISTIC_LOCK_CONFLICT · `tagIds`로 태그 재연결 · 메인 캐시(main) 무효화
+                    """)
     @PutMapping("/api/admin/events/{id}")
     public EventDetailResponse update(@PathVariable Long id, @Valid @RequestBody EventUpdateRequest request) {
         return service.update(id, request);
     }
 
-    @Operation(summary = "일정 부분 수정", description = "EVENT_WRITE. 낙관락. null 필드는 미변경.")
+    @Operation(summary = "일정 부분 수정", description = """
+                    일정 부분 수정(PATCH). 전달된(비-null) 필드만 적용한다.
+
+                    - 인증(JWT): 필요 — `EVENT_WRITE`
+                    - 경로 변수: `id` — 수정할 일정 ID
+                    - 요청 본문: `EventPatchRequest` — 제목·description·장소·시작/종료 일시·종일·`tagIds`(null이면 태그 미변경)·`version`(필수); start/end 교차검증은 DB값과 합쳐 서비스가 수행(종료는 시작보다 이후)
+                    - 반환값: `EventDetailResponse` — 수정된 일정 상세
+                    - 부수효과: `version` 불일치 시 409 OPTIMISTIC_LOCK_CONFLICT · 메인 캐시(main) 무효화
+                    """)
     @PatchMapping("/api/admin/events/{id}")
     public EventDetailResponse patch(@PathVariable Long id, @Valid @RequestBody EventPatchRequest request) {
         return service.patch(id, request);
     }
 
-    @Operation(summary = "일정 삭제", description = "EVENT_WRITE. soft delete.")
+    @Operation(summary = "일정 삭제", description = """
+                    일정을 삭제한다.
+
+                    - 인증(JWT): 필요 — `EVENT_WRITE`
+                    - 경로 변수: `id` — 삭제할 일정 ID
+                    - 반환값: 없음(204)
+                    - 부수효과: soft delete(deleted_at) · 연결 태그 정리 · 메인 캐시(main) 무효화
+                    """)
     @DeleteMapping("/api/admin/events/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {

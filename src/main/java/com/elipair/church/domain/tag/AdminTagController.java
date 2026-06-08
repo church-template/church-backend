@@ -28,21 +28,43 @@ public class AdminTagController {
         this.service = service;
     }
 
-    @Operation(summary = "태그 추가", description = "TAG_MANAGE 필요. 설교·공지·일정·부서에 다형 연결 가능한 태그를 생성한다.")
+    @Operation(summary = "태그 추가", description = """
+            설교·공지·일정·부서에 다형 연결 가능한 태그를 생성한다(전역 태그 풀).
+
+            - 인증(JWT): 필요 — `TAG_MANAGE`
+            - 요청 본문: `TagCreateRequest` — `name`(필수, ≤50)
+            - 반환값: `TagResponse` — 생성된 태그(201 Created)
+            - 부수효과: `name` 중복 시 409 DUPLICATE_RESOURCE
+            """)
     @PostMapping("/api/admin/tags")
     @PreAuthorize("hasAuthority('TAG_MANAGE')")
     public ResponseEntity<TagResponse> create(@Valid @RequestBody TagCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
-    @Operation(summary = "태그 수정", description = "TAG_MANAGE 필요. 태그명 변경.")
+    @Operation(summary = "태그 수정", description = """
+            지정 태그의 이름을 변경한다(PATCH). `name` null이면 미변경.
+
+            - 인증(JWT): 필요 — `TAG_MANAGE`
+            - 경로 변수: `id` — 수정할 태그 ID
+            - 요청 본문: `TagUpdateRequest` — `name`(선택, ≤50)
+            - 반환값: `TagResponse` — 수정된 태그
+            - 부수효과: `name` 중복 시 409 DUPLICATE_RESOURCE
+            """)
     @PatchMapping("/api/admin/tags/{id}")
     @PreAuthorize("hasAuthority('TAG_MANAGE')")
     public TagResponse update(@PathVariable Long id, @Valid @RequestBody TagUpdateRequest request) {
         return service.update(id, request);
     }
 
-    @Operation(summary = "태그 삭제", description = "TAG_MANAGE 필요. 해당 태그의 모든 content_tags 연결을 정리 후 삭제.")
+    @Operation(summary = "태그 삭제", description = """
+            지정 태그를 물리 삭제한다. 미디어와 달리 비차단 삭제.
+
+            - 인증(JWT): 필요 — `TAG_MANAGE`
+            - 경로 변수: `id` — 삭제할 태그 ID
+            - 반환값: 없음(204)
+            - 부수효과: 해당 태그의 모든 `content_tags` 연결을 먼저 정리한 뒤 태그를 삭제(비차단 — 사용 중이어도 차단하지 않음)
+            """)
     @DeleteMapping("/api/admin/tags/{id}")
     @PreAuthorize("hasAuthority('TAG_MANAGE')")
     @ResponseStatus(HttpStatus.NO_CONTENT)

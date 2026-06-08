@@ -27,7 +27,13 @@ public class SermonController {
         this.service = service;
     }
 
-    @Operation(summary = "설교 목록", description = "공개. 카드 메타만(content 제외). 설교자·시리즈·날짜·태그 필터, q 검색, 페이지네이션.")
+    @Operation(summary = "설교 목록", description = """
+                    설교 카드 목록을 필터·검색·페이지네이션으로 조회한다.
+
+                    - 인증(JWT): 불필요
+                    - 요청 파라미터: `preacher`·`series` — 설교자/시리즈 필터; `from`·`to` — 설교일 범위(yyyy-MM-dd); `q` — 제목/내용 검색어; `tagId` — 태그 필터; `page`·`size`·`sort` — 페이지네이션(기본 `preachedAt,desc`)
+                    - 반환값: `Page<SermonCardResponse>` — 카드 메타만(본문 `content` 제외)·페이지네이션
+                    """)
     @GetMapping("/api/sermons")
     public Page<SermonCardResponse> list(
             @Parameter(description = "설교자 필터") @RequestParam(required = false) String preacher,
@@ -46,7 +52,14 @@ public class SermonController {
         return service.list(preacher, series, from, to, q, tagId, pageable);
     }
 
-    @Operation(summary = "설교 상세", description = "공개. content 포함. 조회 시 view_count 버퍼 +1.")
+    @Operation(summary = "설교 상세", description = """
+                    설교 한 건의 상세를 조회한다(본문·태그·`version` 포함).
+
+                    - 인증(JWT): 불필요
+                    - 경로 변수: `id` — 조회할 설교 ID
+                    - 반환값: `SermonDetailResponse` — 본문 `content` 포함 상세
+                    - 부수효과: 조회수 버퍼 +1(버퍼 누적분을 합산해 응답)
+                    """)
     @GetMapping("/api/sermons/{id}")
     public SermonDetailResponse get(@PathVariable Long id) {
         return service.get(id);

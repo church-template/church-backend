@@ -25,9 +25,14 @@ public class AgreementAdminController {
         this.memberService = memberService;
     }
 
-    @Operation(
-            summary = "동의 일괄 리셋",
-            description = "MEMBER_MANAGE 필요. 대상 회원들의 약관·개인정보 동의 플래그를 초기화. 다음 로그인 시 requiresAgreement=true로 재동의 유도.")
+    @Operation(summary = "동의 일괄 리셋", description = """
+                    지정한 약관 항목의 동의 플래그를 전체 회원 대상으로 일괄 초기화(200, 본문 없음). 약관 개정 시 재동의 사이클 트리거용.
+
+                    - 인증(JWT): 필요 — `MEMBER_MANAGE`
+                    - 요청 본문: `AgreementResetRequest` — `target`("terms" 또는 "privacy")
+                    - 반환값: 없음(200)
+                    - 부수효과: 해당 플래그 false로 일괄 초기화 → 영향 회원 로그인 시 requiresAgreement=true로 재동의 유도 · 알 수 없는 target은 400 INVALID_INPUT_VALUE
+                    """)
     @PostMapping("/reset")
     @PreAuthorize("hasAuthority('MEMBER_MANAGE')")
     @ResponseStatus(HttpStatus.OK)

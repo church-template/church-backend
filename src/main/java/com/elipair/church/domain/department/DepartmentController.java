@@ -20,13 +20,24 @@ public class DepartmentController {
         this.service = service;
     }
 
-    @Operation(summary = "부서 목록", description = "공개. 카드 메타만(description 제외). 비페이징 평배열.")
+    @Operation(summary = "부서 목록", description = """
+                    전체 부서를 조회한다. 프론트가 `parentId`로 트리를 조립한다.
+
+                    - 인증(JWT): 불필요
+                    - 반환값: `DepartmentCardResponse` 배열 — 카드 메타만(description 제외; 이름·담당·상위·정렬), 비페이징 평배열(sortOrder·id 순)
+                    """)
     @GetMapping("/api/departments")
     public List<DepartmentCardResponse> list() {
         return service.list();
     }
 
-    @Operation(summary = "부서 상세", description = "공개. description 포함. 계층 구조(부모·하위 부서) 정보 포함.")
+    @Operation(summary = "부서 상세", description = """
+                    단일 부서 상세를 조회한다.
+
+                    - 인증(JWT): 불필요
+                    - 경로 변수: `id` — 부서 ID
+                    - 반환값: `DepartmentDetailResponse` — description·담당·`parentId`(상위)·정렬·`version` 포함
+                    """)
     @GetMapping("/api/departments/{id}")
     public DepartmentDetailResponse get(@PathVariable Long id) {
         return service.get(id);

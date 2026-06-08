@@ -27,13 +27,25 @@ public class MemberQueryController {
         this.service = service;
     }
 
-    @Operation(summary = "교인 목록", description = "MEMBER_MANAGE 필요. 전체 교인 카드 목록. 페이지네이션.")
+    @Operation(summary = "교인 목록", description = """
+                    전체 회원 카드 목록 조회(소프트 삭제 제외). 가입 승인·역할 관리용.
+
+                    - 인증(JWT): 필요 — `MEMBER_MANAGE`
+                    - 요청 파라미터: `page`·`size`·`sort` — 페이지네이션
+                    - 반환값: `Page<MemberCardResponse>` — uuid·이름·전화번호·직분·역할·`approved`(MEMBER 보유 여부)·createdAt 카드 목록
+                    """)
     @GetMapping
     public Page<MemberCardResponse> list(Pageable pageable) {
         return service.list(pageable);
     }
 
-    @Operation(summary = "교인 상세", description = "MEMBER_MANAGE 필요. uuid로 특정 교인의 상세 정보(역할·직분 포함) 조회.")
+    @Operation(summary = "교인 상세", description = """
+                    uuid로 특정 회원의 상세 정보를 조회.
+
+                    - 인증(JWT): 필요 — `MEMBER_MANAGE`
+                    - 경로 변수: `uuid` — 조회할 회원 uuid
+                    - 반환값: `MemberDetailResponse` — 이메일·직분·역할·권한·`approved`·약관 동의 상태 포함 상세
+                    """)
     @GetMapping("/{uuid}")
     public MemberDetailResponse detail(@PathVariable UUID uuid) {
         return service.detail(uuid);

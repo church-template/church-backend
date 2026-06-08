@@ -26,10 +26,13 @@ public class EventController {
         this.service = service;
     }
 
-    @Operation(
-            summary = "일정 목록(달력)",
-            description =
-                    "공개. 카드 메타만(content 제외). 필터: year+month(해당 월 전체)·startDate+endDate(직접 지정, yyyy-MM-dd)·tagId. 필터 없으면 전체. start_at ASC 정렬.")
+    @Operation(summary = "일정 목록(달력)", description = """
+                    달력 범위로 일정을 조회한다. 지정 구간과 겹치는 일정을 반환(end_at 배타 경계).
+
+                    - 인증(JWT): 불필요
+                    - 요청 파라미터: `year`+`month` — 해당 월 전체(쌍으로); `startDate`+`endDate` — 직접 지정 범위(yyyy-MM-dd, 양끝 포함, 쌍으로); `tagId` — 태그 필터; 모두 없으면 전체. 쌍 누락·잘못된 범위는 400 · 동시 제공 시 year/month 우선
+                    - 반환값: `EventCardResponse` — 카드 메타만(description 제외; 제목·장소·기간·종일·태그), 페이지네이션, start_at ASC 정렬
+                    """)
     @GetMapping("/api/events")
     public Page<EventCardResponse> list(
             @RequestParam(required = false) Integer year,
@@ -42,7 +45,13 @@ public class EventController {
         return service.list(range, tagId, pageable);
     }
 
-    @Operation(summary = "일정 상세", description = "공개. content 포함.")
+    @Operation(summary = "일정 상세", description = """
+                    단일 일정 상세를 조회한다.
+
+                    - 인증(JWT): 불필요
+                    - 경로 변수: `id` — 일정 ID
+                    - 반환값: `EventDetailResponse` — description·기간·종일·`version`·태그 포함
+                    """)
     @GetMapping("/api/events/{id}")
     public EventDetailResponse get(@PathVariable Long id) {
         return service.get(id);

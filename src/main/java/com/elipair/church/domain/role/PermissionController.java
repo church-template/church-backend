@@ -22,9 +22,12 @@ public class PermissionController {
         this.service = service;
     }
 
-    @Operation(
-            summary = "권한 목록",
-            description = "ROLE_MANAGE 필요. 시스템에 정의된 전체 권한 카탈로그를 반환한다. 역할 권한 일괄설정 시 유효한 permissionId 목록 확인에 사용한다.")
+    @Operation(summary = "권한 목록", description = """
+            시스템에 정의된 전체 권한 카탈로그를 name 오름차순으로 조회한다(비페이징 평배열). 역할 권한 일괄설정 시 유효한 권한 이름 확인에 사용한다.
+
+            - 인증(JWT): 필요 — `ROLE_MANAGE`
+            - 반환값: `List<PermissionResponse>` — 각 권한의 id·name(코드용 영문 키)·description(한글 설명)
+            """)
     @GetMapping
     public List<PermissionResponse> list() {
         return service.list();

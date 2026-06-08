@@ -33,27 +33,53 @@ public class PositionController {
         this.service = service;
     }
 
-    @Operation(summary = "직분 목록", description = "공개. 시스템에 등록된 전체 직분 목록을 반환한다. 직분은 권한과 독립적이며 표시용 레이블로만 사용된다.")
+    @Operation(summary = "직분 목록", description = """
+            등록된 전체 직분(목사·장로 등)을 `sortOrder` 오름차순으로 조회한다(비페이징 평배열). 직분은 권한과 독립적이며 표시용 레이블로만 쓰인다.
+
+            - 인증(JWT): 불필요 (공개)
+            - 반환값: `List<PositionResponse>` — 각 직분의 id·name(한글)·`sortOrder`·`createdAt`
+            """)
     @GetMapping("/api/positions")
     public List<PositionResponse> list() {
         return service.list();
     }
 
-    @Operation(summary = "직분 추가", description = "POSITION_MANAGE 필요. 새 직분을 추가한다. 직분 이름은 한글 사용자 표시용이며 권한과 무관하다.")
+    @Operation(summary = "직분 추가", description = """
+            새 직분을 추가한다. 직분 이름은 한글 사용자 표시용이며 권한과 무관하다.
+
+            - 인증(JWT): 필요 — `POSITION_MANAGE`
+            - 요청 본문: `PositionCreateRequest` — `name`(필수, ≤50)·`sortOrder`(선택, ≥0; 생략 시 기존 최대값+10 자동 부여)
+            - 반환값: `PositionResponse` — 생성된 직분(201 Created)
+            - 부수효과: `name` 중복 시 409 DUPLICATE_RESOURCE
+            """)
     @PostMapping("/api/admin/positions")
     @PreAuthorize("hasAuthority('POSITION_MANAGE')")
     public ResponseEntity<PositionResponse> create(@Valid @RequestBody PositionCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
-    @Operation(summary = "직분 수정", description = "POSITION_MANAGE 필요. 지정 직분의 이름을 수정한다.")
+    @Operation(summary = "직분 수정", description = """
+            지정 직분의 name·sortOrder를 부분 수정한다(PATCH). null 필드는 미변경.
+
+            - 인증(JWT): 필요 — `POSITION_MANAGE`
+            - 경로 변수: `id` — 수정할 직분 ID
+            - 요청 본문: `PositionUpdateRequest` — `name`(선택, ≤50)·`sortOrder`(선택, ≥0)
+            - 반환값: `PositionResponse` — 수정된 직분
+            - 부수효과: `name` 중복 시 409 DUPLICATE_RESOURCE
+            """)
     @PatchMapping("/api/admin/positions/{id}")
     @PreAuthorize("hasAuthority('POSITION_MANAGE')")
     public PositionResponse update(@PathVariable Long id, @Valid @RequestBody PositionUpdateRequest request) {
         return service.update(id, request);
     }
 
-    @Operation(summary = "직분 삭제", description = "POSITION_MANAGE 필요. 지정 직분을 삭제한다.")
+    @Operation(summary = "직분 삭제", description = """
+            지정 직분을 물리 삭제한다(soft delete 아님).
+
+            - 인증(JWT): 필요 — `POSITION_MANAGE`
+            - 경로 변수: `id` — 삭제할 직분 ID
+            - 반환값: 없음(204)
+            """)
     @DeleteMapping("/api/admin/positions/{id}")
     @PreAuthorize("hasAuthority('POSITION_MANAGE')")
     @ResponseStatus(HttpStatus.NO_CONTENT)

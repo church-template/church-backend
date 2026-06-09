@@ -34,10 +34,14 @@ public class AdminBulletinController {
         this.service = service;
     }
 
-    @Operation(
-            summary = "주보 업로드",
-            description =
-                    "BULLETIN_WRITE. multipart: file(신규 PDF 업로드) XOR mediaId(기존 media 재사용) 중 하나만 허용. title·serviceDate 필수. PDF는 media 라이브러리에 저장 후 bulletins.media_id로 참조.")
+    @Operation(summary = "주보 업로드", description = """
+                    주보를 등록한다. PDF는 신규 업로드 또는 기존 미디어 재사용 중 하나로 연결한다.
+
+                    - 인증(JWT): 필요 — `BULLETIN_WRITE`
+                    - 요청 본문/업로드: multipart — `title`(필수)·`serviceDate`(필수, `yyyy-MM-dd`)·`file`(신규 PDF 업로드) XOR `mediaId`(기존 PDF media 재사용). 둘 다/둘 다 없음은 거부
+                    - 반환값: `BulletinDetailResponse` — 생성된 주보 상세(`mediaId`로 PDF 참조), 201 Created
+                    - 부수효과: `file`은 매직바이트로 PDF 검증 후 라이브러리 저장(한도 초과 시 413 FILE_SIZE_EXCEEDED) · `mediaId`는 PDF media 재사용 · 모든 검증은 디스크 쓰기보다 먼저(고아 파일 방지)
+                    """)
     @PostMapping("/api/admin/bulletins")
     public ResponseEntity<BulletinDetailResponse> create(
             @RequestParam(required = false) String title,
@@ -49,10 +53,15 @@ public class AdminBulletinController {
                 .body(service.create(title, serviceDate, file, mediaId, principal.id()));
     }
 
-    @Operation(
-            summary = "주보 수정",
-            description =
-                    "BULLETIN_WRITE. 부분 수정. version 필수(낙관락, 충돌 시 409). file XOR mediaId로 PDF 교체 가능. null 파라미터는 미변경.")
+    @Operation(summary = "주보 수정", description = """
+                    주보를 부분 수정한다(PATCH). 전달된(비-null) 파라미터만 적용한다.
+
+                    - 인증(JWT): 필요 — `BULLETIN_WRITE`
+                    - 경로 변수: `id` — 수정할 주보 ID
+                    - 요청 본문/업로드: multipart — `version`(필수, 낙관락)·`title`·`serviceDate`·`file` XOR `mediaId`(PDF 교체 시). null 파라미터는 미변경
+                    - 반환값: `BulletinDetailResponse` — 수정된 주보 상세(`version` 증가분 반영)
+                    - 부수효과: `version` 불일치 시 409 OPTIMISTIC_LOCK_CONFLICT(업로드보다 먼저 검사 → 충돌 시 파일 미생성) · PDF 교체 시 413 FILE_SIZE_EXCEEDED 가능
+                    """)
     @PatchMapping("/api/admin/bulletins/{id}")
     public BulletinDetailResponse patch(
             @PathVariable Long id,
@@ -65,9 +74,14 @@ public class AdminBulletinController {
         return service.patch(id, version, title, serviceDate, file, mediaId, principal.id());
     }
 
-    @Operation(
-            summary = "주보 삭제",
-            description = "BULLETIN_WRITE. soft delete. media 원본(PDF 파일)은 보존되므로 실제 파일 삭제는 미디어 삭제 API를 별도 사용.")
+    @Operation(summary = "주보 삭제", description = """
+                    주보를 soft delete 한다.
+
+                    - 인증(JWT): 필요 — `BULLETIN_WRITE`
+                    - 경로 변수: `id` — 삭제할 주보 ID
+                    - 반환값: 없음(204)
+                    - 부수효과: soft delete · media 원본(PDF)은 라이브러리에 보존(연결해제)되므로 실제 파일 삭제는 미디어 차단형 삭제 API를 별도 사용
+                    """)
     @DeleteMapping("/api/admin/bulletins/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {

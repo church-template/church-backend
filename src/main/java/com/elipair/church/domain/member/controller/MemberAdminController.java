@@ -37,25 +37,44 @@ public class MemberAdminController {
         this.memberRoleService = memberRoleService;
     }
 
-    @Operation(
-            summary = "회원 정보 수정",
-            description = "MEMBER_MANAGE 필요. 관리자가 대상 회원의 이름·직분 등을 수정. soft delete 회원에는 적용 안 됨.")
+    @Operation(summary = "회원 정보 수정", description = """
+                    관리자가 대상 회원의 프로필을 부분 수정(PATCH). 번호 변경 구제 등. 비밀번호는 reset-password로만 변경.
+
+                    - 인증(JWT): 필요 — `MEMBER_MANAGE`
+                    - 경로 변수: `uuid` — 수정할 회원 uuid
+                    - 요청 본문: `AdminMemberUpdateRequest` — 이름·전화번호·이메일 (모두 선택)
+                    - 반환값: `MemberDetailResponse` — 수정된 회원 상세
+                    - 부수효과: 소프트 삭제 회원은 조회되지 않아 404 · 전화번호 자기 제외 중복 시 409 DUPLICATE_RESOURCE
+                    """)
     @PatchMapping("/{uuid}")
     @PreAuthorize("hasAuthority('MEMBER_MANAGE')")
     public MemberDetailResponse update(@PathVariable UUID uuid, @Valid @RequestBody AdminMemberUpdateRequest request) {
         return memberService.adminUpdate(uuid, request);
     }
 
-    @Operation(summary = "비밀번호 초기화", description = "MEMBER_MANAGE 필요. 임시 비밀번호 생성 후 반환. 대상 회원은 다음 로그인 시 변경 권고.")
+    @Operation(summary = "비밀번호 초기화", description = """
+                    대상 회원의 비밀번호를 임시 값으로 재설정하고 평문을 1회 반환(관리자가 대면 전달).
+
+                    - 인증(JWT): 필요 — `MEMBER_MANAGE`
+                    - 경로 변수: `uuid` — 대상 회원 uuid
+                    - 반환값: `ResetPasswordResponse` — `temporaryPassword`(평문, 로그·예외에 미노출)
+                    - 부수효과: 대상 회원 비밀번호를 임시값(BCrypt 해시)으로 교체
+                    """)
     @PostMapping("/{uuid}/reset-password")
     @PreAuthorize("hasAuthority('MEMBER_MANAGE')")
     public ResetPasswordResponse resetPassword(@PathVariable UUID uuid) {
         return memberService.resetPassword(uuid);
     }
 
-    @Operation(
-            summary = "역할 부여",
-            description = "ROLE_MANAGE 필요. 요청자 maxPriority 이하 역할만 부여 가능(에스컬레이션 방지). 자기 자신 부여 불가. is_system 역할 수정 불가.")
+    @Operation(summary = "역할 부여", description = """
+                    대상 회원에게 역할 부여(멱등; 이미 보유 시 no-op). `MEMBER` 부여가 곧 교인 승인이다.
+
+                    - 인증(JWT): 필요 — `ROLE_MANAGE`
+                    - 경로 변수: `uuid` — 대상 회원 uuid
+                    - 요청 본문: `RoleGrantRequest` — `roleId`
+                    - 반환값: `MemberDetailResponse` — 역할 반영된 회원 상세
+                    - 부수효과: 요청자 maxPriority보다 높은 priority 역할이면 403(에스컬레이션 방지) · 자기 자신에게 부여 불가(403)
+                    """)
     @PostMapping("/{uuid}/roles")
     @PreAuthorize("hasAuthority('ROLE_MANAGE')")
     public MemberDetailResponse grantRole(
@@ -65,7 +84,14 @@ public class MemberAdminController {
         return memberRoleService.grant(uuid, request.roleId(), principal.id(), principal.maxPriority());
     }
 
-    @Operation(summary = "역할 회수", description = "ROLE_MANAGE 필요. 요청자 maxPriority 이하 역할만 회수 가능. 마지막 SUPER_ADMIN 회수 불가.")
+    @Operation(summary = "역할 회수", description = """
+                    대상 회원의 역할 회수(204; 멱등 — 미보유 시 no-op).
+
+                    - 인증(JWT): 필요 — `ROLE_MANAGE`
+                    - 경로 변수: `uuid` — 대상 회원 uuid; `roleId` — 회수할 역할 ID
+                    - 반환값: 없음(204)
+                    - 부수효과: 요청자 maxPriority보다 높은 priority면 403 · 자기 자신 회수 불가(403) · 마지막 활성 SUPER_ADMIN 회수 시 차단(403)
+                    """)
     @DeleteMapping("/{uuid}/roles/{roleId}")
     @PreAuthorize("hasAuthority('ROLE_MANAGE')")
     @ResponseStatus(HttpStatus.NO_CONTENT)

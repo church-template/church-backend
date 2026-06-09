@@ -26,10 +26,14 @@ public class MediaController {
         this.service = service;
     }
 
-    @Operation(
-            summary = "파일 서빙(공개)",
-            description =
-                    "공개. 본문 이미지 렌더·PDF 열람용. mime_type을 Content-Type으로 그대로 반환하며 X-Content-Type-Options: nosniff로 MIME 스니핑 XSS를 차단한다.")
+    @Operation(summary = "파일 서빙(공개)", description = """
+                    미디어 파일 원본을 그대로 내려보낸다(본문 이미지 렌더·PDF 열람용). 본문이 참조하는 `media:{id}`의 실제 바이트를 받는 경로다.
+
+                    - 인증(JWT): 불필요 (경로 3분법의 공개 갈래)
+                    - 경로 변수: `id` — 서빙할 미디어 ID
+                    - 반환값: 파일 바이트(`Resource`). 저장된 `mime_type`을 그대로 Content-Type으로 세팅, `Content-Disposition: inline`(원본 파일명)
+                    - 부수효과: `X-Content-Type-Options: nosniff`로 브라우저 MIME 스니핑 기반 저장형 XSS 차단 · `stored_path`는 외부에 비노출
+                    """)
     @GetMapping("/api/media/{id}")
     public ResponseEntity<Resource> serve(@PathVariable Long id) {
         MediaContent content = service.serve(id);

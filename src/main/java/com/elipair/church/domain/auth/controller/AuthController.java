@@ -35,33 +35,54 @@ public class AuthController {
         this.authService = authService;
     }
 
-    @Operation(
-            summary = "회원가입",
-            description = "공개. termsAgreed·privacyAgreed 모두 true 필수. 중복 전화번호 409 DUPLICATE_RESOURCE.")
+    @Operation(summary = "회원가입", description = """
+                    신규 회원 가입(201). 가입 시 기본 `USER` 역할만 부여되며, 교인 승인(`MEMBER`)은 관리자가 별도 진행.
+
+                    - 인증(JWT): 불필요
+                    - 요청 본문: `SignupRequest` — 전화번호·이름·비밀번호(8자 이상)·이메일(선택)·`termsAgreed`·`privacyAgreed`(둘 다 true 필수)
+                    - 반환값: `SignupResponse` — uuid·이름·전화번호·부여된 역할 목록
+                    - 부수효과: 전화번호 정규화 후 중복 시 409 DUPLICATE_RESOURCE(deleted 제외 부분 unique)
+                    """)
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)
     public SignupResponse signup(@Valid @RequestBody SignupRequest request) {
         return authService.signup(request);
     }
 
-    @Operation(
-            summary = "로그인",
-            description =
-                    "공개. 전화번호+비밀번호 인증. 성공 시 accessToken·refreshToken·member 반환. requiresAgreement=true면 재동의 필요. 실패 시 phone 존재 여부 미노출(401 AUTHENTICATION_FAILED).")
+    @Operation(summary = "로그인", description = """
+                    전화번호+비밀번호 인증 후 토큰 발급. refresh는 jti 기준으로 Redis에 등록(다중 세션 허용).
+
+                    - 인증(JWT): 불필요
+                    - 요청 본문: `LoginRequest` — 전화번호·비밀번호
+                    - 반환값: `LoginResponse` — `tokens`(accessToken·refreshToken)·`member` 요약·`requiresAgreement`(true면 재동의 유도)
+                    - 부수효과: 인증 실패 시 전화번호 존재 여부와 무관하게 동일한 401 AUTHENTICATION_FAILED 반환(계정 열거 방지)
+                    """)
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
     }
 
-    @Operation(
-            summary = "토큰 재발급",
-            description = "공개. refreshToken으로 새 accessToken·refreshToken 발급. 토큰 무효·만료 시 401 INVALID_TOKEN.")
+    @Operation(summary = "토큰 재발급", description = """
+                    refreshToken으로 accessToken만 재발급. 권한은 DB에서 재조회되어 새 access에 반영되고, refresh는 그대로 echo된다.
+
+                    - 인증(JWT): 불필요
+                    - 요청 본문: `RefreshRequest` — refreshToken
+                    - 반환값: `RefreshResponse` — `tokens`(새 accessToken + 기존 refreshToken)
+                    - 부수효과: refresh 만료·위변조·revoke·미등록·탈퇴 회원 시 401 INVALID_TOKEN
+                    """)
     @PostMapping("/refresh")
     public RefreshResponse refresh(@Valid @RequestBody RefreshRequest request) {
         return authService.refresh(request);
     }
 
-    @Operation(summary = "로그아웃", description = "인증 필요. accessToken Redis 블랙리스트 등록 + refreshToken 무효화. 이후 해당 토큰 재사용 불가.")
+    @Operation(summary = "로그아웃", description = """
+                    현재 access를 블랙리스트에 등록하고 본인 소유 refresh를 revoke(204). 무효·타인 refresh는 무시(멱등).
+
+                    - 인증(JWT): 필요 — 로그인(본인)
+                    - 요청 본문: `LogoutRequest` — refreshToken
+                    - 반환값: 없음(204)
+                    - 부수효과: access jti를 남은 수명만큼 Redis 블랙리스트 등록 + refresh jti revoke → 두 토큰 재사용 불가
+                    """)
     @PostMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("isAuthenticated()")

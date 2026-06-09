@@ -37,25 +37,40 @@ public class RoleController {
         this.service = service;
     }
 
-    @Operation(summary = "역할 목록", description = "ROLE_MANAGE 필요. 전체 역할 목록(우선순위·권한 포함)을 반환한다.")
+    @Operation(summary = "역할 목록", description = """
+            전체 역할을 priority 내림차순으로 조회한다(비페이징 평배열).
+
+            - 인증(JWT): 필요 — `ROLE_MANAGE`
+            - 반환값: `List<RoleResponse>` — 각 역할의 id·name·priority·`isSystem`·description·할당 권한(`permissions`) 목록
+            """)
     @GetMapping
     public List<RoleResponse> list() {
         return service.list();
     }
 
-    @Operation(
-            summary = "역할 생성",
-            description =
-                    "ROLE_MANAGE 필요. 요청자의 maxPriority 이하 priority만 설정 가능(위계 에스컬레이션 방지). is_system 역할은 생성 후 변경 불가.")
+    @Operation(summary = "역할 생성", description = """
+            새 역할(권한 묶음 + priority 위계)을 생성한다. API 생성 역할은 `isSystem=false` 고정.
+
+            - 인증(JWT): 필요 — `ROLE_MANAGE`
+            - 요청 본문: `RoleCreateRequest` — `name`(필수, ≤50)·`priority`(필수)·`description`(선택, ≤255)
+            - 반환값: `RoleResponse` — 생성된 역할(201 Created); 권한 미할당 상태
+            - 부수효과: 위계검증 — `priority`가 요청자 maxPriority 초과 시 403(에스컬레이션 차단, 같은 레벨 허용) · `name` 중복 시 409 DUPLICATE_RESOURCE
+            """)
     @PostMapping
     public ResponseEntity<RoleResponse> create(
             @Valid @RequestBody RoleCreateRequest request, @AuthenticationPrincipal MemberPrincipal principal) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request, principal.maxPriority()));
     }
 
-    @Operation(
-            summary = "역할 수정",
-            description = "ROLE_MANAGE 필요. 대상 역할의 priority가 요청자 maxPriority보다 높으면 403. is_system 역할은 수정 불가.")
+    @Operation(summary = "역할 수정", description = """
+            역할의 name·priority·description을 부분 수정한다(PATCH). null 필드는 미변경.
+
+            - 인증(JWT): 필요 — `ROLE_MANAGE`
+            - 경로 변수: `id` — 수정할 역할 ID
+            - 요청 본문: `RoleUpdateRequest` — `name`(선택, ≤50)·`priority`(선택)·`description`(선택, ≤255)
+            - 반환값: `RoleResponse` — 수정된 역할
+            - 부수효과: 위계검증 — 대상 역할 `priority`가 요청자 maxPriority 초과 시 403 · `is_system` 역할은 수정 불가(403) · `priority` 변경 시 새 값도 maxPriority 이하여야 함 · `name` 중복 시 409 DUPLICATE_RESOURCE
+            """)
     @PatchMapping("/{id}")
     public RoleResponse update(
             @PathVariable Long id,
@@ -64,20 +79,29 @@ public class RoleController {
         return service.update(id, request, principal.maxPriority());
     }
 
-    @Operation(
-            summary = "역할 삭제",
-            description =
-                    "ROLE_MANAGE 필요. 대상 역할의 priority가 요청자 maxPriority보다 높으면 403. is_system 역할 또는 마지막 SUPER_ADMIN 역할은 삭제 불가.")
+    @Operation(summary = "역할 삭제", description = """
+            역할을 물리 삭제한다(soft delete 아님). role_permissions 연결은 DB CASCADE로 함께 제거.
+
+            - 인증(JWT): 필요 — `ROLE_MANAGE`
+            - 경로 변수: `id` — 삭제할 역할 ID
+            - 반환값: 없음(204)
+            - 부수효과: 위계검증 — 대상 역할 `priority`가 요청자 maxPriority 초과 시 403 · `is_system` 역할은 삭제 불가(403) · 멤버에게 할당된 역할이면 409 ROLE_IN_USE(member_roles FK RESTRICT)
+            """)
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id, @AuthenticationPrincipal MemberPrincipal principal) {
         service.delete(id, principal.maxPriority());
     }
 
-    @Operation(
-            summary = "역할 권한 일괄설정",
-            description =
-                    "ROLE_MANAGE 필요. 역할에 할당된 권한을 요청 목록으로 전체 교체한다. 대상 역할의 priority가 요청자 maxPriority보다 높거나 is_system이면 403.")
+    @Operation(summary = "역할 권한 일괄설정", description = """
+            역할에 할당된 권한을 요청 목록으로 전체 교체한다(PUT 시맨틱). 중복 이름은 흡수.
+
+            - 인증(JWT): 필요 — `ROLE_MANAGE`
+            - 경로 변수: `id` — 대상 역할 ID
+            - 요청 본문: `RolePermissionsRequest` — `permissions`(권한 **이름** 문자열 배열, 각 ≤50); 빈 배열이면 전 권한 회수
+            - 반환값: `RoleResponse` — 권한이 교체된 역할
+            - 부수효과: 위계검증 — 대상 역할 `priority`가 요청자 maxPriority 초과 또는 `is_system`이면 403 · 존재하지 않는 권한 이름이 포함되면 400 INVALID_INPUT_VALUE
+            """)
     @PutMapping("/{id}/permissions")
     public RoleResponse setPermissions(
             @PathVariable Long id,

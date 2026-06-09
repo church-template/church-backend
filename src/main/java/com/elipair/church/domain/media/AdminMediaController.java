@@ -36,16 +36,27 @@ public class AdminMediaController {
         this.service = service;
     }
 
-    @Operation(
-            summary = "업로드",
-            description = "MEDIA_MANAGE. multipart/form-data로 이미지·PDF 업로드. 생성된 media.id를 본문에 media:{id} 형태로 참조한다.")
+    @Operation(summary = "업로드", description = """
+                    이미지·PDF를 미디어 라이브러리에 업로드한다. 생성된 `media.id`를 본문에 `media:{id}` 형태로 참조해 재사용한다.
+
+                    - 인증(JWT): 필요 — `MEDIA_MANAGE`
+                    - 요청 본문/업로드: `file`(multipart/form-data) — 업로드 파일. 매직바이트로 형식 확정(JPEG/PNG/GIF/WEBP/PDF 5종만 허용)
+                    - 반환값: `MediaResponse` — 생성된 미디어(id·파일명·mimeType·size·업로더·생성일), 201 Created
+                    - 부수효과: 한도(기본 10MB) 초과 시 413 FILE_SIZE_EXCEEDED · 미허용 형식은 파일을 쓰지 않고 거부
+                    """)
     @PostMapping("/api/admin/media")
     public ResponseEntity<MediaResponse> upload(
             @RequestParam("file") MultipartFile file, @AuthenticationPrincipal MemberPrincipal principal) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.upload(file, principal.id()));
     }
 
-    @Operation(summary = "목록", description = "MEDIA_MANAGE. 미디어 라이브러리 목록. type(image/pdf)·업로드일 범위 필터, 페이지네이션.")
+    @Operation(summary = "목록", description = """
+                    미디어 라이브러리 목록을 조회한다.
+
+                    - 인증(JWT): 필요 — `MEDIA_MANAGE`
+                    - 요청 파라미터: `type` — `image`|`pdf` 필터(생략 시 전체); `from`·`to` — 업로드일 범위(`yyyy-MM-dd`, 상한 포함); `page`·`size`·`sort`(기본 `createdAt,desc`)
+                    - 반환값: `Page<MediaResponse>` — 페이지네이션 목록(미디어 메타)
+                    """)
     @GetMapping("/api/admin/media")
     public Page<MediaResponse> list(
             @RequestParam(required = false) String type,
@@ -55,25 +66,39 @@ public class AdminMediaController {
         return service.list(type, from, to, pageable);
     }
 
-    @Operation(summary = "단건 조회", description = "MEDIA_MANAGE. 미디어 단건 상세 조회.")
+    @Operation(summary = "단건 조회", description = """
+                    미디어 한 건의 메타를 조회한다(파일 바이트가 아닌 메타).
+
+                    - 인증(JWT): 필요 — `MEDIA_MANAGE`
+                    - 경로 변수: `id` — 조회할 미디어 ID
+                    - 반환값: `MediaResponse` — 미디어 메타(id·파일명·mimeType·size·업로더·생성일)
+                    """)
     @GetMapping("/api/admin/media/{id}")
     public MediaResponse get(@PathVariable Long id) {
         return service.get(id);
     }
 
-    @Operation(
-            summary = "참조목록",
-            description =
-                    "MEDIA_MANAGE. 해당 미디어를 참조하는 콘텐츠 목록(본문 LIKE 'media:{id}' + gallery_photos/bulletins FK). 삭제 전 확인용.")
+    @Operation(summary = "참조목록", description = """
+                    이 미디어를 참조하는 콘텐츠 목록을 조회한다(삭제 전 확인용).
+
+                    - 인증(JWT): 필요 — `MEDIA_MANAGE`
+                    - 경로 변수: `id` — 대상 미디어 ID
+                    - 반환값: `MediaReferencesResponse` — `inUse` 여부 + `references`(`ContentRef`: type·id·title 목록)
+                    - 부수효과: 참조 추적은 본문 `LIKE '%media:{id}%'` 와 `gallery_photos`·`bulletins`의 `media_id` FK 합집합(별도 조인 테이블 없음)
+                    """)
     @GetMapping("/api/admin/media/{id}/references")
     public MediaReferencesResponse references(@PathVariable Long id) {
         return service.references(id);
     }
 
-    @Operation(
-            summary = "삭제",
-            description =
-                    "MEDIA_MANAGE. 차단형 삭제. 본문·gallery_photos·bulletins에 참조가 1건이라도 있으면 409 MEDIA_IN_USE + 참조목록 반환. 참조가 없을 때만 파일 + DB 레코드를 제거한다.")
+    @Operation(summary = "삭제", description = """
+                    미디어를 차단형으로 삭제한다(라이브러리 원본 제거). 파일과 DB 레코드를 모두 지우는 유일한 경로다.
+
+                    - 인증(JWT): 필요 — `MEDIA_MANAGE`
+                    - 경로 변수: `id` — 삭제할 미디어 ID
+                    - 반환값: 없음(204)
+                    - 부수효과: 차단형 삭제 — 본문·`gallery_photos`·`bulletins`에 참조가 1건이라도 있으면 409 MEDIA_IN_USE + `references` 목록 반환 · 참조 0일 때만 DB 행을 먼저 확정(flush) 후 파일 제거(I/O 실패 시 롤백으로 깨진 참조 0)
+                    """)
     @DeleteMapping("/api/admin/media/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {

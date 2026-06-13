@@ -318,6 +318,7 @@ POST /api/auth/login
 |---|---|---|---|
 | GET | /api/members/me | 인증 | 내 정보(직분·권한 포함, DB 최신값) |
 | PATCH | /api/members/me | 인증 | 내 정보 수정 (이름·전화번호·비밀번호·이메일). 전화번호 변경 시 중복 체크 |
+| DELETE | /api/members/me | 인증 | 회원 탈퇴(자가탈퇴). 비밀번호 재인증 후 soft delete + 개인정보 스크럽 + 전체 세션 무효화 |
 | GET | /api/members | MEMBER_MANAGE | 교인 목록 |
 | GET | /api/members/{uuid} | MEMBER_MANAGE | 교인 상세 |
 | PATCH | /api/admin/members/{uuid} | MEMBER_MANAGE | 관리자가 회원 정보 수정 (전화번호 변경 등) |
@@ -327,6 +328,13 @@ POST /api/auth/login
 
 - 본인이 로그인된 상태면 `PATCH /api/members/me`로 전화번호를 직접 변경.
 - 번호도 바뀌고 비밀번호도 잊어 로그인 불가하면, 관리자가 `PATCH /api/admin/members/{uuid}`로 번호 갱신 + `reset-password`로 초기화하여 구제(서로 아는 교회 특성 활용).
+
+회원 탈퇴(자가탈퇴) 정책:
+- `DELETE /api/members/me` — 본인만. 요청 본문에 현재 비밀번호를 받아 재인증(불일치 401 AUTHENTICATION_FAILED).
+- 물리 삭제가 아니라 soft delete(`deleted_at`) + 개인정보 스크럽: phone·name은 비식별 토큰값, email은 null, password는 사용불가 값. 작성 콘텐츠는 FK 유지 + `(탈퇴한 사용자)` 표시.
+- 탈퇴 즉시 전체 세션 무효화: 모든 리프레시 토큰 회수 + 현재 access 토큰 블랙리스트.
+- 마지막 활성 SUPER_ADMIN은 탈퇴 차단(403 ACCESS_DENIED).
+- 재가입: 탈퇴한 전화번호로 재가입 가능(부분 유니크가 활성 회원만 대상). 단 새 계정(새 uuid)이며 이전 데이터와 무관.
 
 **약관 재동의 사이클 (방식 A — 플래그 리셋)**
 정책 개정 시 관리자가 해당 동의 플래그를 일괄 false로 바꾸면, 회원이 접속할 때 동의 상태를 조회해 풀린 항목이 있으면 재동의 페이지로 이동시키는 흐름. 별도 약관 버전 테이블 없이 members의 boolean으로 처리한다.

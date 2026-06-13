@@ -58,6 +58,19 @@ class MemberTest {
     }
 
     @Test
+    void withdraw_softdeletes_and_scrubs_pii() {
+        Member m = signup();
+
+        m.withdraw();
+
+        assertThat(m.isDeleted()).isTrue();
+        assertThat(m.getPhone()).isEqualTo("(탈퇴)");
+        assertThat(m.getName()).isEqualTo("(탈퇴한 사용자)");
+        assertThat(m.getEmail()).isNull();
+        assertThat(m.getPassword()).isEqualTo("(withdrawn)");
+    }
+
+    @Test
     void grant_and_revoke_role_are_idempotent_membership_changes() {
         Member m = signup();
         Role member = Role.create("MEMBER", 100, "교인");

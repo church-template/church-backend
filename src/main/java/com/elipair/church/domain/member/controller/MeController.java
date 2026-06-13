@@ -92,7 +92,7 @@ public class MeController {
                     - 인증(JWT): 필요 — 로그인(본인)
                     - 요청 본문: `WithdrawRequest` — 현재 비밀번호(재인증)
                     - 반환값: 없음(204)
-                    - 부수효과: 비밀번호 불일치 401 · 모든 리프레시 토큰 회수 + 현재 access 블랙리스트
+                    - 부수효과: 모든 리프레시 토큰 회수 + 현재 access 토큰 블랙리스트(전체 세션 무효화) · 마지막 활성 SUPER_ADMIN은 탈퇴 차단(403)
                     """)
     @DeleteMapping
     @ResponseStatus(HttpStatus.NO_CONTENT)

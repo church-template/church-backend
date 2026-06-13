@@ -10,6 +10,9 @@ import com.elipair.church.domain.member.dto.MemberDetailResponse;
 import com.elipair.church.domain.member.dto.ResetPasswordResponse;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
+import com.elipair.church.global.security.AccessTokenBlacklister;
+import com.elipair.church.global.security.RoleHierarchyValidator;
+import com.elipair.church.global.security.redis.RefreshTokenStore;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -22,12 +25,25 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class MemberService {
 
+    private static final String SUPER_ADMIN = "SUPER_ADMIN";
+
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RefreshTokenStore refreshTokenStore;
+    private final AccessTokenBlacklister accessTokenBlacklister;
+    private final RoleHierarchyValidator hierarchyValidator;
 
-    public MemberService(MemberRepository memberRepository, PasswordEncoder passwordEncoder) {
+    public MemberService(
+            MemberRepository memberRepository,
+            PasswordEncoder passwordEncoder,
+            RefreshTokenStore refreshTokenStore,
+            AccessTokenBlacklister accessTokenBlacklister,
+            RoleHierarchyValidator hierarchyValidator) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
+        this.refreshTokenStore = refreshTokenStore;
+        this.accessTokenBlacklister = accessTokenBlacklister;
+        this.hierarchyValidator = hierarchyValidator;
     }
 
     public MeResponse getMe(Long memberId) {
@@ -42,6 +58,22 @@ public class MemberService {
             member.changePassword(passwordEncoder.encode(request.password()));
         }
         return MeResponse.from(persist(member));
+    }
+
+    @Transactional
+    public void withdraw(Long memberId, String uuid, String accessToken, String rawPassword) {
+        Member member = findActive(memberId);
+        if (!passwordEncoder.matches(rawPassword, member.getPassword())) {
+            throw new BusinessException(ErrorCode.AUTHENTICATION_FAILED);
+        }
+        if (member.hasRole(SUPER_ADMIN)) {
+            long activeSuperAdmins = memberRepository.countByRoles_NameAndDeletedAtIsNull(SUPER_ADMIN);
+            hierarchyValidator.validateNotLastSuperAdmin(true, activeSuperAdmins);
+        }
+        member.withdraw();
+        memberRepository.saveAndFlush(member);
+        refreshTokenStore.revokeAll(uuid);
+        accessTokenBlacklister.blacklist(accessToken);
     }
 
     public AgreementResponse getAgreements(Long memberId) {

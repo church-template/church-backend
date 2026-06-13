@@ -21,13 +21,12 @@ import com.elipair.church.domain.role.Role;
 import com.elipair.church.domain.role.RoleRepository;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
+import com.elipair.church.global.security.AccessTokenBlacklister;
 import com.elipair.church.global.security.JwtTokenProvider;
 import com.elipair.church.global.security.MemberPrincipal;
 import com.elipair.church.global.security.redis.RefreshTokenStore;
-import com.elipair.church.global.security.redis.TokenBlacklist;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.MalformedJwtException;
-import java.util.Date;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,7 +54,7 @@ class AuthServiceTest {
     private RefreshTokenStore refreshTokenStore;
 
     @Mock
-    private TokenBlacklist tokenBlacklist;
+    private AccessTokenBlacklister accessTokenBlacklister;
 
     @InjectMocks
     private AuthService authService;
@@ -173,10 +172,6 @@ class AuthServiceTest {
 
     @Test
     void logout_blacklists_access_and_revokes_owned_refresh() {
-        Claims access = mock(Claims.class);
-        when(tokenProvider.parse("access-tok")).thenReturn(access);
-        when(access.getId()).thenReturn("ajti");
-        when(access.getExpiration()).thenReturn(new Date(System.currentTimeMillis() + 60_000));
         Claims refresh = mock(Claims.class);
         when(tokenProvider.parse("refresh-tok")).thenReturn(refresh);
         when(refresh.get(JwtTokenProvider.CLAIM_TYPE, String.class)).thenReturn("refresh");
@@ -185,16 +180,12 @@ class AuthServiceTest {
 
         authService.logout(new MemberPrincipal(1L, "uuid-1", "n", 100), "access-tok", "refresh-tok");
 
-        verify(tokenBlacklist).blacklist(eq("ajti"), any());
+        verify(accessTokenBlacklister).blacklist("access-tok");
         verify(refreshTokenStore).revoke("uuid-1", "rjti");
     }
 
     @Test
     void logout_skips_revoke_for_other_users_refresh() {
-        Claims access = mock(Claims.class);
-        when(tokenProvider.parse("access-tok")).thenReturn(access);
-        when(access.getId()).thenReturn("ajti");
-        when(access.getExpiration()).thenReturn(new Date(System.currentTimeMillis() + 60_000));
         Claims refresh = mock(Claims.class);
         when(tokenProvider.parse("other-tok")).thenReturn(refresh);
         when(refresh.get(JwtTokenProvider.CLAIM_TYPE, String.class)).thenReturn("refresh");
@@ -203,7 +194,7 @@ class AuthServiceTest {
 
         authService.logout(new MemberPrincipal(1L, "uuid-1", "n", 100), "access-tok", "other-tok");
 
-        verify(tokenBlacklist).blacklist(eq("ajti"), any());
+        verify(accessTokenBlacklister).blacklist("access-tok");
         verify(refreshTokenStore, never()).revoke(any(), any());
     }
 }

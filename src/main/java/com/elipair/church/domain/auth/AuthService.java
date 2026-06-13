@@ -16,10 +16,10 @@ import com.elipair.church.domain.role.Role;
 import com.elipair.church.domain.role.RoleRepository;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
+import com.elipair.church.global.security.AccessTokenBlacklister;
 import com.elipair.church.global.security.JwtTokenProvider;
 import com.elipair.church.global.security.MemberPrincipal;
 import com.elipair.church.global.security.redis.RefreshTokenStore;
-import com.elipair.church.global.security.redis.TokenBlacklist;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import java.util.UUID;
@@ -39,7 +39,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final RefreshTokenStore refreshTokenStore;
-    private final TokenBlacklist tokenBlacklist;
+    private final AccessTokenBlacklister accessTokenBlacklister;
 
     public AuthService(
             MemberRepository memberRepository,
@@ -47,13 +47,13 @@ public class AuthService {
             PasswordEncoder passwordEncoder,
             JwtTokenProvider tokenProvider,
             RefreshTokenStore refreshTokenStore,
-            TokenBlacklist tokenBlacklist) {
+            AccessTokenBlacklister accessTokenBlacklister) {
         this.memberRepository = memberRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
         this.refreshTokenStore = refreshTokenStore;
-        this.tokenBlacklist = tokenBlacklist;
+        this.accessTokenBlacklister = accessTokenBlacklister;
     }
 
     @Transactional
@@ -142,20 +142,8 @@ public class AuthService {
     }
 
     public void logout(MemberPrincipal principal, String accessToken, String refreshToken) {
-        blacklistAccess(accessToken);
+        accessTokenBlacklister.blacklist(accessToken);
         revokeRefreshIfOwned(principal.uuid(), refreshToken);
-    }
-
-    /** 현재 access 토큰을 jti·남은 수명으로 블랙리스트. 필터가 이미 검증했으므로 방어적 skip만. */
-    private void blacklistAccess(String accessToken) {
-        try {
-            Claims claims = tokenProvider.parse(accessToken);
-            if (claims.getId() != null) {
-                tokenBlacklist.blacklist(claims.getId(), claims.getExpiration().toInstant());
-            }
-        } catch (JwtException | IllegalArgumentException ignored) {
-            // 도달 드묾(필터 통과 토큰) — 방어적 무시
-        }
     }
 
     /** 본인 소유 refresh일 때만 revoke. 무효/타인 토큰은 skip(멱등 로그아웃 — INVALID_TOKEN 던지지 않음). */

@@ -36,6 +36,10 @@ import org.springframework.data.annotation.LastModifiedDate;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Member extends BaseTimeEntity {
 
+    private static final String WITHDRAWN_PHONE = "(탈퇴)";
+    private static final String WITHDRAWN_NAME = "(탈퇴한 사용자)";
+    private static final String WITHDRAWN_CREDENTIAL = "(withdrawn)"; // 비-BCrypt 센티넬 → matches() 항상 false
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -172,5 +176,14 @@ public class Member extends BaseTimeEntity {
 
     public void softDelete() {
         this.deletedAt = LocalDateTime.now();
+    }
+
+    /** 자가탈퇴: 소프트삭제 + 개인정보(PII) 스크럽. 표시는 deletedAt 기준 마스킹이라 스크럽값과 무관. */
+    public void withdraw() {
+        softDelete();
+        this.phone = WITHDRAWN_PHONE;
+        this.name = WITHDRAWN_NAME;
+        this.email = null;
+        this.password = WITHDRAWN_CREDENTIAL;
     }
 }

@@ -5,16 +5,22 @@ import com.elipair.church.domain.member.dto.AgreementResponse;
 import com.elipair.church.domain.member.dto.AgreementUpdateRequest;
 import com.elipair.church.domain.member.dto.MeResponse;
 import com.elipair.church.domain.member.dto.MeUpdateRequest;
+import com.elipair.church.domain.member.dto.WithdrawRequest;
 import com.elipair.church.global.security.MemberPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 본인 회원 정보·약관(스펙 §5.2). path는 공개지만 메서드 보안으로 인증 강제(익명→401). */
@@ -78,5 +84,25 @@ public class MeController {
     public AgreementResponse submitAgreements(
             @AuthenticationPrincipal MemberPrincipal principal, @Valid @RequestBody AgreementUpdateRequest request) {
         return service.submitAgreements(principal.id(), request);
+    }
+
+    @Operation(summary = "회원 탈퇴", description = """
+                    본인 계정 자가탈퇴. 소프트 삭제 + 개인정보 스크럽 후 전체 세션을 무효화한다.
+
+                    - 인증(JWT): 필요 — 로그인(본인)
+                    - 요청 본문: `WithdrawRequest` — 현재 비밀번호(재인증)
+                    - 반환값: 없음(204)
+                    - 부수효과: 비밀번호 불일치 401 · 모든 리프레시 토큰 회수 + 현재 access 블랙리스트
+                    """)
+    @DeleteMapping
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void withdraw(
+            @AuthenticationPrincipal MemberPrincipal principal,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @Valid @RequestBody WithdrawRequest request) {
+        String accessToken = (authorization != null && authorization.startsWith("Bearer "))
+                ? authorization.substring(7)
+                : authorization;
+        service.withdraw(principal.id(), principal.uuid(), accessToken, request.password());
     }
 }

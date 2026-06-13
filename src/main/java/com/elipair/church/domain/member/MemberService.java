@@ -10,6 +10,8 @@ import com.elipair.church.domain.member.dto.MemberDetailResponse;
 import com.elipair.church.domain.member.dto.ResetPasswordResponse;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
+import com.elipair.church.global.security.AccessTokenBlacklister;
+import com.elipair.church.global.security.redis.RefreshTokenStore;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -24,10 +26,18 @@ public class MemberService {
 
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RefreshTokenStore refreshTokenStore;
+    private final AccessTokenBlacklister accessTokenBlacklister;
 
-    public MemberService(MemberRepository memberRepository, PasswordEncoder passwordEncoder) {
+    public MemberService(
+            MemberRepository memberRepository,
+            PasswordEncoder passwordEncoder,
+            RefreshTokenStore refreshTokenStore,
+            AccessTokenBlacklister accessTokenBlacklister) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
+        this.refreshTokenStore = refreshTokenStore;
+        this.accessTokenBlacklister = accessTokenBlacklister;
     }
 
     public MeResponse getMe(Long memberId) {
@@ -42,6 +52,18 @@ public class MemberService {
             member.changePassword(passwordEncoder.encode(request.password()));
         }
         return MeResponse.from(persist(member));
+    }
+
+    @Transactional
+    public void withdraw(Long memberId, String uuid, String accessToken, String rawPassword) {
+        Member member = findActive(memberId);
+        if (!passwordEncoder.matches(rawPassword, member.getPassword())) {
+            throw new BusinessException(ErrorCode.AUTHENTICATION_FAILED);
+        }
+        member.withdraw();
+        memberRepository.saveAndFlush(member);
+        refreshTokenStore.revokeAll(uuid);
+        accessTokenBlacklister.blacklist(accessToken);
     }
 
     public AgreementResponse getAgreements(Long memberId) {

@@ -1,0 +1,9 @@
+# 로컬 개발 전용 프로필(dev). 운영(기본/prod)에는 영향을 주지 않는다.
+# dev에서만 Flyway 시드 경로(classpath:db/dev)를 추가해 db/dev/afterMigrate__seed.sql(목데이터)를 적용한다.
+# 운영 배포는 이 프로필을 활성화하지 않으므로 db/migration만 실행 → 가짜 데이터가 섞이지 않는다(멀티-교회 템플릿 원칙).
+#
+# 사용법: SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun  (또는 컨테이너에 SPRING_PROFILES_ACTIVE=dev 주입)
+spring:
+  flyway:
+    # 기본 application.yml의 locations(classpath:db/migration)를 덮어쓴다.
+    locations: classpath:db/migration,classpath:db/dev

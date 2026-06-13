@@ -134,4 +134,30 @@ class WithdrawApiTest {
                         .content("{\"password\":\"any\"}"))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void last_super_admin_cannot_withdraw() throws Exception {
+        persistMember("01099990000", "password123", "SUPER_ADMIN");
+        String[] t = login("01099990000", "password123");
+
+        mockMvc.perform(delete("/api/members/me")
+                        .header("Authorization", "Bearer " + t[0])
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"password123\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void non_last_super_admin_can_withdraw() throws Exception {
+        persistMember("01099990000", "password123", "SUPER_ADMIN");
+        persistMember("01099990001", "password123", "SUPER_ADMIN");
+        String[] t = login("01099990000", "password123");
+
+        mockMvc.perform(delete("/api/members/me")
+                        .header("Authorization", "Bearer " + t[0])
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"password123\"}"))
+                .andExpect(status().isNoContent());
+    }
 }

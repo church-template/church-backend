@@ -11,6 +11,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.TestPropertySource;
 
 @DataJpaTest
@@ -91,5 +93,74 @@ class MemberRepositoryTest {
                 .get()
                 .extracting(Member::isTermsAgreed)
                 .isEqualTo(false);
+    }
+
+    @Test
+    void search_by_name_substring_case_insensitive() {
+        save("01011112222", "김철수");
+        save("01033334444", "이영희");
+
+        Page<Member> result = memberRepository.findAll(MemberSpecifications.filter("철수"), PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).extracting(Member::getName).containsExactly("김철수");
+    }
+
+    @Test
+    void search_by_phone_with_hyphen_input() {
+        save("01012345678", "김철수");
+        save("01099998888", "이영희");
+
+        Page<Member> result = memberRepository.findAll(MemberSpecifications.filter("010-1234"), PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).extracting(Member::getName).containsExactly("김철수");
+    }
+
+    @Test
+    void search_name_only_query_skips_phone_predicate() {
+        save("01012345678", "김철수");
+
+        Page<Member> result = memberRepository.findAll(MemberSpecifications.filter("철"), PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).extracting(Member::getName).containsExactly("김철수");
+    }
+
+    @Test
+    void search_blank_query_returns_all_active() {
+        save("01012345678", "김철수");
+        save("01099998888", "이영희");
+
+        Page<Member> result = memberRepository.findAll(MemberSpecifications.filter("  "), PageRequest.of(0, 10));
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+    }
+
+    @Test
+    void search_excludes_soft_deleted() {
+        Member m = save("01012345678", "김철수");
+        m.softDelete();
+        memberRepository.saveAndFlush(m);
+
+        Page<Member> result = memberRepository.findAll(MemberSpecifications.filter("김철수"), PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).isEmpty();
+    }
+
+    @Test
+    void search_by_name_is_case_insensitive_for_latin() {
+        save("01000000000", "John");
+
+        Page<Member> result = memberRepository.findAll(MemberSpecifications.filter("john"), PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).extracting(Member::getName).containsExactly("John");
+    }
+
+    @Test
+    void search_matches_union_of_name_and_phone() {
+        save("01099998888", "Room101"); // 이름에 101 포함
+        save("01010100000", "이영희"); // 전화에 101 포함
+
+        Page<Member> result = memberRepository.findAll(MemberSpecifications.filter("101"), PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).extracting(Member::getName).containsExactlyInAnyOrder("Room101", "이영희");
     }
 }

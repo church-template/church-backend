@@ -20,4 +20,12 @@ class PhoneNumbersTest {
         assertThatThrownBy(() -> PhoneNumbers.normalize(null)).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> PhoneNumbers.normalize("---")).isInstanceOf(BusinessException.class);
     }
+
+    @Test
+    void extract_digits_keeps_only_numbers() {
+        assertThat(PhoneNumbers.extractDigits("010-1234-5678")).isEqualTo("01012345678");
+        assertThat(PhoneNumbers.extractDigits("김철수")).isEmpty();
+        assertThat(PhoneNumbers.extractDigits(null)).isEmpty();
+        assertThat(PhoneNumbers.extractDigits("  ")).isEmpty();
+    }
 }

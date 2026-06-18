@@ -110,4 +110,32 @@ class MemberAdminApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.temporaryPassword").isNotEmpty());
     }
+
+    @Test
+    void search_members_by_name() throws Exception {
+        persist("01011112222", "김철수");
+        persist("01033334444", "이영희");
+
+        mockMvc.perform(get("/api/members").param("q", "철수").header("Authorization", memberManager()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].name").value("김철수"));
+    }
+
+    @Test
+    void search_members_by_phone_with_hyphen() throws Exception {
+        persist("01012345678", "김철수");
+        persist("01099998888", "이영희");
+
+        mockMvc.perform(get("/api/members").param("q", "010-1234").header("Authorization", memberManager()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].name").value("김철수"));
+    }
+
+    @Test
+    void search_without_permission_is_403() throws Exception {
+        mockMvc.perform(get("/api/members").param("q", "철수").header("Authorization", plainUser()))
+                .andExpect(status().isForbidden());
+    }
 }

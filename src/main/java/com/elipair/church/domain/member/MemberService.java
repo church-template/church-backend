@@ -90,8 +90,11 @@ public class MemberService {
         return AgreementResponse.from(member);
     }
 
-    public Page<MemberCardResponse> list(Pageable pageable) {
-        return memberRepository.findByDeletedAtIsNull(pageable).map(MemberCardResponse::from);
+    public Page<MemberCardResponse> list(String q, Pageable pageable) {
+        Page<Member> page = (q == null || q.isBlank())
+                ? memberRepository.findByDeletedAtIsNull(pageable)
+                : memberRepository.findAll(MemberSpecifications.filter(q), pageable);
+        return page.map(MemberCardResponse::from);
     }
 
     public MemberDetailResponse detail(UUID uuid) {

@@ -12,6 +12,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 관리자 회원 조회(스펙 §5.2). path는 /api/members지만 메서드 보안으로 MEMBER_MANAGE 강제. */
@@ -31,12 +32,12 @@ public class MemberQueryController {
                     전체 회원 카드 목록 조회(소프트 삭제 제외). 가입 승인·역할 관리용.
 
                     - 인증(JWT): 필요 — `MEMBER_MANAGE`
-                    - 요청 파라미터: `page`·`size`·`sort` — 페이지네이션
+                    - 요청 파라미터: `q`(선택) — 이름 또는 전화번호 부분검색(없으면 전체) · `page`·`size`·`sort` — 페이지네이션
                     - 반환값: `Page<MemberCardResponse>` — uuid·이름·전화번호·직분·역할·`approved`(MEMBER 보유 여부)·createdAt 카드 목록
                     """)
     @GetMapping
-    public Page<MemberCardResponse> list(Pageable pageable) {
-        return service.list(pageable);
+    public Page<MemberCardResponse> list(@RequestParam(required = false) String q, Pageable pageable) {
+        return service.list(q, pageable);
     }
 
     @Operation(summary = "교인 상세", description = """

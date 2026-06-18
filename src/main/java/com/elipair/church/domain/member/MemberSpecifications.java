@@ -20,9 +20,10 @@ final class MemberSpecifications {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.isNull(root.get("deletedAt")));
             if (q != null && !q.isBlank()) {
+                String normalizedQ = q.trim();
                 List<Predicate> match = new ArrayList<>();
-                match.add(cb.like(cb.lower(root.get("name")), "%" + q.toLowerCase(Locale.ROOT) + "%"));
-                String digits = PhoneNumbers.extractDigits(q);
+                match.add(cb.like(cb.lower(root.get("name")), "%" + normalizedQ.toLowerCase(Locale.ROOT) + "%"));
+                String digits = PhoneNumbers.extractDigits(normalizedQ);
                 if (!digits.isEmpty()) {
                     match.add(cb.like(root.get("phone"), "%" + digits + "%"));
                 }

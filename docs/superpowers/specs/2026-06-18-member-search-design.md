@@ -15,7 +15,7 @@
 
 ## API 계약
 
-```
+```text
 GET /api/members?q={검색어}&page=&size=&sort=    (권한: MEMBER_MANAGE)
 ```
 
@@ -32,7 +32,7 @@ GET /api/members?q={검색어}&page=&size=&sort=    (권한: MEMBER_MANAGE)
 
 기존 `*Specifications` 패턴을 그대로 따른다(`SermonSpecifications`, `NoticeSpecifications` 참고): 순수 조건 빌더, 항상 미삭제, null/blank 인자는 술어 제외.
 
-```
+```text
 deletedAt IS NULL                              (항상)
 + q 비어있지 않으면 OR(
       lower(name)  LIKE %lower(q)%,            (이름 부분일치, 대소문자 무시)
@@ -42,6 +42,7 @@ deletedAt IS NULL                              (항상)
 
 - `digits(q)`는 `q`에서 숫자만 추출한 값. **`q`가 순수 이름이면(숫자 0개) 전화 술어를 아예 추가하지 않는다** → 이름 검색이 전화 컬럼에 헛매칭되는 일 없음.
 - `phone`은 숫자만 저장(`01012345678`)이라 `lower()` 불필요.
+- 검색어(`q`)는 앞뒤 공백을 트림한 값으로 매칭한다(이름 LIKE·전화 숫자 추출 공통) — `" 철수 "` 입력도 매칭.
 - `taggedIds` 등 다른 필터는 회원엔 없으므로 인자는 `q` 하나.
 
 ## 전화번호 정규화 재사용 (작은 리팩터)
@@ -54,7 +55,7 @@ deletedAt IS NULL                              (항상)
 
 ## 서비스 흐름 — `MemberService.list`
 
-```
+```text
 list(String q, Pageable p):
   q == null || q.isBlank()
       → memberRepository.findByDeletedAtIsNull(p)        // 기존 경로(position fetch-join 유지)

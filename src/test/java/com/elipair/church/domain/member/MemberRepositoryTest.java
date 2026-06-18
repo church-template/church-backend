@@ -163,4 +163,13 @@ class MemberRepositoryTest {
 
         assertThat(result.getContent()).extracting(Member::getName).containsExactlyInAnyOrder("Room101", "이영희");
     }
+
+    @Test
+    void search_trims_surrounding_whitespace() {
+        save("01011112222", "김철수");
+
+        Page<Member> result = memberRepository.findAll(MemberSpecifications.filter("  철수  "), PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).extracting(Member::getName).containsExactly("김철수");
+    }
 }

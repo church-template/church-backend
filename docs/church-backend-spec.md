@@ -325,6 +325,7 @@ POST /api/auth/login
 | POST | /api/admin/members/{uuid}/reset-password | MEMBER_MANAGE | 관리자 비밀번호 초기화 (로그인 불가 회원 구제) |
 | POST | /api/admin/members/{uuid}/roles | ROLE_MANAGE | 역할 부여 (위계 검증). MEMBER 부여 = 교인 승인 |
 | DELETE | /api/admin/members/{uuid}/roles/{roleId} | ROLE_MANAGE | 역할 회수 (위계 검증) |
+| PUT | /api/admin/members/{uuid}/position | MEMBER_MANAGE | 회원 직분 지정/변경/해제. body `{positionId}` (null이면 해제). 직분은 권한과 분리되어 위계 검증 없음. 미존재 회원/직분 → 404. 응답 `MemberDetailResponse` |
 
 - 본인이 로그인된 상태면 `PATCH /api/members/me`로 전화번호를 직접 변경.
 - 번호도 바뀌고 비밀번호도 잊어 로그인 불가하면, 관리자가 `PATCH /api/admin/members/{uuid}`로 번호 갱신 + `reset-password`로 초기화하여 구제(서로 아는 교회 특성 활용).

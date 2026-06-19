@@ -4,6 +4,7 @@ import com.elipair.church.domain.member.MemberRoleService;
 import com.elipair.church.domain.member.MemberService;
 import com.elipair.church.domain.member.dto.AdminMemberUpdateRequest;
 import com.elipair.church.domain.member.dto.MemberDetailResponse;
+import com.elipair.church.domain.member.dto.PositionAssignRequest;
 import com.elipair.church.domain.member.dto.ResetPasswordResponse;
 import com.elipair.church.domain.member.dto.RoleGrantRequest;
 import com.elipair.church.global.security.MemberPrincipal;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -50,6 +52,22 @@ public class MemberAdminController {
     @PreAuthorize("hasAuthority('MEMBER_MANAGE')")
     public MemberDetailResponse update(@PathVariable UUID uuid, @Valid @RequestBody AdminMemberUpdateRequest request) {
         return memberService.adminUpdate(uuid, request);
+    }
+
+    @Operation(summary = "직분 부여/해제", description = """
+                    대상 회원의 직분을 지정·변경하거나 해제한다(`positionId`가 null이면 해제).
+
+                    - 인증(JWT): 필요 — `MEMBER_MANAGE`
+                    - 경로 변수: `uuid` — 대상 회원 uuid
+                    - 요청 본문: `PositionAssignRequest` — `positionId`(null이면 직분 해제)
+                    - 반환값: `MemberDetailResponse` — 직분 반영된 회원 상세
+                    - 부수효과: 직분은 권한과 무관(위계 검증 없음) · 회원/직분 미존재 시 404
+                    """)
+    @PutMapping("/{uuid}/position")
+    @PreAuthorize("hasAuthority('MEMBER_MANAGE')")
+    public MemberDetailResponse changePosition(
+            @PathVariable UUID uuid, @RequestBody PositionAssignRequest request) {
+        return memberService.changePosition(uuid, request.positionId());
     }
 
     @Operation(summary = "비밀번호 초기화", description = """

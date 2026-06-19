@@ -8,6 +8,8 @@ import com.elipair.church.domain.member.dto.MeUpdateRequest;
 import com.elipair.church.domain.member.dto.MemberCardResponse;
 import com.elipair.church.domain.member.dto.MemberDetailResponse;
 import com.elipair.church.domain.member.dto.ResetPasswordResponse;
+import com.elipair.church.domain.position.Position;
+import com.elipair.church.domain.position.PositionRepository;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import com.elipair.church.global.security.AccessTokenBlacklister;
@@ -32,18 +34,21 @@ public class MemberService {
     private final RefreshTokenStore refreshTokenStore;
     private final AccessTokenBlacklister accessTokenBlacklister;
     private final RoleHierarchyValidator hierarchyValidator;
+    private final PositionRepository positionRepository;
 
     public MemberService(
             MemberRepository memberRepository,
             PasswordEncoder passwordEncoder,
             RefreshTokenStore refreshTokenStore,
             AccessTokenBlacklister accessTokenBlacklister,
-            RoleHierarchyValidator hierarchyValidator) {
+            RoleHierarchyValidator hierarchyValidator,
+            PositionRepository positionRepository) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.refreshTokenStore = refreshTokenStore;
         this.accessTokenBlacklister = accessTokenBlacklister;
         this.hierarchyValidator = hierarchyValidator;
+        this.positionRepository = positionRepository;
     }
 
     public MeResponse getMe(Long memberId) {
@@ -99,6 +104,18 @@ public class MemberService {
 
     public MemberDetailResponse detail(UUID uuid) {
         return MemberDetailResponse.from(findActiveByUuid(uuid));
+    }
+
+    @Transactional
+    public MemberDetailResponse changePosition(UUID uuid, Long positionId) {
+        Member member = findActiveByUuid(uuid); // 미존재/탈퇴 → 404
+        Position position = positionId == null
+                ? null
+                : positionRepository
+                        .findById(positionId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND)); // 미존재 직분 → 404
+        member.changePosition(position); // null이면 직분 해제
+        return MemberDetailResponse.from(member);
     }
 
     @Transactional

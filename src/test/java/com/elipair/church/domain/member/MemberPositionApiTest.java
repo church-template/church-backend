@@ -77,4 +77,76 @@ class MemberPositionApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.position").value("집사"));
     }
+
+    @Test
+    void clear_position_with_null_returns_detail_without_position() throws Exception {
+        Member target = persist("01066667777", "해제대상");
+        Long elder = positionId("장로", 3);
+        // 먼저 직분 부여
+        mockMvc.perform(put("/api/admin/members/" + target.getUuid() + "/position")
+                        .header("Authorization", memberManager())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"positionId\":" + elder + "}"))
+                .andExpect(status().isOk());
+        // null로 해제
+        mockMvc.perform(put("/api/admin/members/" + target.getUuid() + "/position")
+                        .header("Authorization", memberManager())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"positionId\":null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.position").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void assign_nonexistent_position_is_404() throws Exception {
+        Member target = persist("01077778888", "대상");
+
+        mockMvc.perform(put("/api/admin/members/" + target.getUuid() + "/position")
+                        .header("Authorization", memberManager())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"positionId\":999999}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    void assign_position_to_nonexistent_member_is_404() throws Exception {
+        Long deacon = positionId("집사", 5);
+
+        mockMvc.perform(put("/api/admin/members/" + UUID.randomUUID() + "/position")
+                        .header("Authorization", memberManager())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"positionId\":" + deacon + "}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    void assign_position_without_member_manage_is_403() throws Exception {
+        Member target = persist("01088889999", "대상");
+        Long deacon = positionId("집사", 5);
+
+        mockMvc.perform(put("/api/admin/members/" + target.getUuid() + "/position")
+                        .header("Authorization", plainUser())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"positionId\":" + deacon + "}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void assign_own_position_is_allowed() throws Exception {
+        // 직분은 권한과 무관하므로 자기 자신에게도 지정 가능(self-protection 없음).
+        Member self = persist("01099990000", "본인");
+        Long pastor = positionId("목사", 1);
+
+        mockMvc.perform(put("/api/admin/members/" + self.getUuid() + "/position")
+                        .header("Authorization",
+                                "Bearer " + provider.issueAccess(
+                                        new MemberPrincipal(self.getId(), self.getUuid().toString(), "본인", 900),
+                                        null, List.of("MEMBER_MANAGE")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"positionId\":" + pastor + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.position").value("목사"));
+    }
 }

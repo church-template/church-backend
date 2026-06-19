@@ -130,7 +130,8 @@ class MemberPositionApiTest {
                         .header("Authorization", plainUser())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"positionId\":" + deacon + "}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
     }
 
     @Test
@@ -148,5 +149,28 @@ class MemberPositionApiTest {
                         .content("{\"positionId\":" + pastor + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.position").value("목사"));
+    }
+
+    @Test
+    void reassign_position_to_different_position_returns_new_position() throws Exception {
+        Member target = persist("01012121212", "재지정대상");
+        Long deacon = positionId("집사", 5);
+        Long elder = positionId("장로", 3);
+
+        // 집사 부여
+        mockMvc.perform(put("/api/admin/members/" + target.getUuid() + "/position")
+                        .header("Authorization", memberManager())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"positionId\":" + deacon + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.position").value("집사"));
+
+        // 장로로 변경
+        mockMvc.perform(put("/api/admin/members/" + target.getUuid() + "/position")
+                        .header("Authorization", memberManager())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"positionId\":" + elder + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.position").value("장로"));
     }
 }

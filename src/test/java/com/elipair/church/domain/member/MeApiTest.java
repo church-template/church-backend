@@ -69,7 +69,20 @@ class MeApiTest {
                 .andExpect(jsonPath("$.name").value("홍길동"))
                 .andExpect(jsonPath("$.roles[0]").value("MEMBER"))
                 .andExpect(jsonPath("$.permissions[0]").value("GALLERY_VIEW"))
+                .andExpect(jsonPath("$.approved").value(true)) // GALLERY_VIEW 보유 = 승인
                 .andExpect(jsonPath("$.termsAgreed").value(true));
+    }
+
+    @Test
+    void me_approved_false_for_user_without_gallery_view() throws Exception {
+        Role user = role("USER"); // 권한 없음 = 미승인
+        Member m = Member.create("01099998888", "미승인자", "{enc}", null, null, true, true);
+        m.grantRole(user);
+        memberRepository.saveAndFlush(m);
+
+        mockMvc.perform(get("/api/members/me").header("Authorization", tokenFor(m)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.approved").value(false));
     }
 
     @Test

@@ -39,14 +39,25 @@ INSERT INTO members (id, uuid, phone, name, password, email, position_id,
     (9005, '00000000-0000-0000-0000-000000009005', '01090000005', '정충성', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', NULL,                    9005, TRUE, TRUE, now(), now(), NULL, NULL),
     (9006, '00000000-0000-0000-0000-000000009006', '01090000006', '강청년', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', 'youth.kang@dev.local',  9006, TRUE, TRUE, now(), now(), NULL, NULL),
     (9007, '00000000-0000-0000-0000-000000009007', '01090000007', '윤방문', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', NULL,                    NULL, TRUE, TRUE, now(), now(), NULL, NULL),
-    (9008, '00000000-0000-0000-0000-000000009008', '01090000008', '한탈퇴', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', NULL,                    9005, TRUE, TRUE, now(), now(), now(), now())
+    (9008, '00000000-0000-0000-0000-000000009008', '01090000008', '한탈퇴', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', NULL,                    9005, TRUE, TRUE, now(), now(), now(), now()),
+    (9009, '00000000-0000-0000-0000-000000009009', '01090000009', '김지혜', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', NULL,                    9005, TRUE, TRUE, now(), now(), NULL, NULL),
+    (9010, '00000000-0000-0000-0000-000000009010', '01090000010', '이준호', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', 'jh.lee@dev.local',     9006, TRUE, TRUE, now(), now(), NULL, NULL),
+    (9011, '00000000-0000-0000-0000-000000009011', '01090000011', '박서연', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', NULL,                    NULL, TRUE, TRUE, now(), now(), NULL, NULL),
+    (9012, '00000000-0000-0000-0000-000000009012', '01090000012', '최민준', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', NULL,                    9005, TRUE, TRUE, now(), now(), NULL, NULL),
+    (9013, '00000000-0000-0000-0000-000000009013', '01090000013', '정하은', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', 'he.jung@dev.local',    9004, TRUE, TRUE, now(), now(), NULL, NULL),
+    (9014, '00000000-0000-0000-0000-000000009014', '01090000014', '강도현', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', NULL,                    9006, TRUE, TRUE, now(), now(), NULL, NULL),
+    (9015, '00000000-0000-0000-0000-000000009015', '01090000015', '조유진', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', NULL,                    NULL, TRUE, TRUE, now(), now(), NULL, NULL),
+    (9016, '00000000-0000-0000-0000-000000009016', '01090000016', '윤서준', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', NULL,                    NULL, TRUE, TRUE, now(), now(), NULL, NULL),
+    (9017, '00000000-0000-0000-0000-000000009017', '01090000017', '임채원', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', NULL,                    NULL, TRUE, TRUE, now(), now(), NULL, NULL),
+    (9018, '00000000-0000-0000-0000-000000009018', '01090000018', '한지우', '$2y$10$ykNxFMLO2GyEL2DpFBr10..Zsvq.AEJ8WJFQc.WXFVM9s46mT9vnq', NULL,                    9006, TRUE, TRUE, now(), now(), NULL, NULL)
 ON CONFLICT (id) DO NOTHING;
 
 -- ── 회원-역할(member_roles) ─────────────────────────────────────────────────
 -- 역할 id는 환경마다 다를 수 있어 이름으로 조회한다. 9000+ 시드 회원에게만 부여(앱 회원 불간섭).
 -- USER = 전원(가입 시 자동 부여 모사)
 INSERT INTO member_roles (member_id, role_id)
-SELECT v.mid, r.id FROM (VALUES (9001),(9002),(9003),(9004),(9005),(9006),(9007),(9008)) v(mid)
+SELECT v.mid, r.id FROM (VALUES (9001),(9002),(9003),(9004),(9005),(9006),(9007),(9008),
+                                (9009),(9010),(9011),(9012),(9013),(9014),(9015),(9016),(9017),(9018)) v(mid)
 CROSS JOIN roles r WHERE r.name = 'USER'
 ON CONFLICT DO NOTHING;
 -- ADMIN = 9001,9002 (교역자)
@@ -54,9 +65,10 @@ INSERT INTO member_roles (member_id, role_id)
 SELECT v.mid, r.id FROM (VALUES (9001),(9002)) v(mid)
 CROSS JOIN roles r WHERE r.name = 'ADMIN'
 ON CONFLICT DO NOTHING;
--- MEMBER = 9003,9004,9005,9006,9008 (교인 승인)
+-- MEMBER = 9003~9006,9008,9009~9015,9018 (교인 승인). 9007·9016·9017은 USER만 = 미승인(승인 대기) 테스트용.
 INSERT INTO member_roles (member_id, role_id)
-SELECT v.mid, r.id FROM (VALUES (9003),(9004),(9005),(9006),(9008)) v(mid)
+SELECT v.mid, r.id FROM (VALUES (9003),(9004),(9005),(9006),(9008),
+                                (9009),(9010),(9011),(9012),(9013),(9014),(9015),(9018)) v(mid)
 CROSS JOIN roles r WHERE r.name = 'MEMBER'
 ON CONFLICT DO NOTHING;
 
@@ -195,17 +207,19 @@ INSERT INTO content_tags (tag_id, resource_type, resource_id) VALUES
     (9004, 'GALLERY_ALBUM', 9002)
 ON CONFLICT DO NOTHING;
 
--- ── 시퀀스 동기화 ────────────────────────────────────────────────────────────
--- 고정 9000+ id를 직접 넣었으므로 각 IDENTITY 시퀀스를 현재 MAX(id)로 올려, 앱의 새 행과 충돌을 막는다.
--- (앱 회원/콘텐츠가 이미 낮은 id를 점유 중이어도 MAX는 9000+이라 앱의 다음 id는 그 위에서 안전하게 이어진다.)
-SELECT setval(pg_get_serial_sequence('positions',       'id'), (SELECT MAX(id) FROM positions));
-SELECT setval(pg_get_serial_sequence('members',         'id'), (SELECT MAX(id) FROM members));
-SELECT setval(pg_get_serial_sequence('tags',            'id'), (SELECT MAX(id) FROM tags));
-SELECT setval(pg_get_serial_sequence('media',           'id'), (SELECT MAX(id) FROM media));
-SELECT setval(pg_get_serial_sequence('sermons',         'id'), (SELECT MAX(id) FROM sermons));
-SELECT setval(pg_get_serial_sequence('notices',         'id'), (SELECT MAX(id) FROM notices));
-SELECT setval(pg_get_serial_sequence('events',          'id'), (SELECT MAX(id) FROM events));
-SELECT setval(pg_get_serial_sequence('departments',     'id'), (SELECT MAX(id) FROM departments));
-SELECT setval(pg_get_serial_sequence('gallery_albums',  'id'), (SELECT MAX(id) FROM gallery_albums));
-SELECT setval(pg_get_serial_sequence('gallery_photos',  'id'), (SELECT MAX(id) FROM gallery_photos));
-SELECT setval(pg_get_serial_sequence('bulletins',       'id'), (SELECT MAX(id) FROM bulletins));
+-- ── 시퀀스 동기화 (9000블록 예약) ────────────────────────────────────────────
+-- 각 IDENTITY 시퀀스를 최소 9999로 끌어올려 9000~9999 전체를 시드 전용으로 예약한다.
+-- → 앱이 만드는 새 행(회원 가입·관리자 콘텐츠)은 10000+에서 시작하므로, 시드 블록을 절대 잠식하지 않는다.
+-- (구버전은 setval(MAX(id))라 시드 확장 시 앱이 이미 쓴 9000+ id와 충돌했음. GREATEST로 영구 차단.)
+-- GREATEST는 NULL(빈 테이블)을 무시하므로 MAX가 NULL이어도 9999로 안전하게 설정된다.
+SELECT setval(pg_get_serial_sequence('positions',       'id'), GREATEST((SELECT MAX(id) FROM positions),      9999));
+SELECT setval(pg_get_serial_sequence('members',         'id'), GREATEST((SELECT MAX(id) FROM members),        9999));
+SELECT setval(pg_get_serial_sequence('tags',            'id'), GREATEST((SELECT MAX(id) FROM tags),           9999));
+SELECT setval(pg_get_serial_sequence('media',           'id'), GREATEST((SELECT MAX(id) FROM media),          9999));
+SELECT setval(pg_get_serial_sequence('sermons',         'id'), GREATEST((SELECT MAX(id) FROM sermons),        9999));
+SELECT setval(pg_get_serial_sequence('notices',         'id'), GREATEST((SELECT MAX(id) FROM notices),        9999));
+SELECT setval(pg_get_serial_sequence('events',          'id'), GREATEST((SELECT MAX(id) FROM events),         9999));
+SELECT setval(pg_get_serial_sequence('departments',     'id'), GREATEST((SELECT MAX(id) FROM departments),    9999));
+SELECT setval(pg_get_serial_sequence('gallery_albums',  'id'), GREATEST((SELECT MAX(id) FROM gallery_albums),  9999));
+SELECT setval(pg_get_serial_sequence('gallery_photos',  'id'), GREATEST((SELECT MAX(id) FROM gallery_photos),  9999));
+SELECT setval(pg_get_serial_sequence('bulletins',       'id'), GREATEST((SELECT MAX(id) FROM bulletins),       9999));

@@ -11,10 +11,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class RoleHierarchyValidator {
 
-    /** 대상 역할 priority가 요청자 maxPriority 이하여야 한다(같은 레벨 허용, 초과만 escalation 차단). */
+    /** 대상 역할 priority가 요청자 maxPriority 이하여야 한다(같은 레벨 허용, 초과만 escalation 차단). 역할 정의 관리·생성용. */
     public void validateAssignable(int requesterMaxPriority, int targetPriority) {
         if (targetPriority > requesterMaxPriority) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED, "대상 역할의 priority가 요청자 권한을 초과합니다");
+        }
+    }
+
+    /**
+     * 회원에게 역할 위임/박탈: 대상 역할 priority가 요청자 maxPriority보다 <b>엄격히 낮아야</b> 한다(동급 차단).
+     * 상위 역할만 하위 역할을 위임/박탈할 수 있다 — 예: SUPER_ADMIN(1000)은 ADMIN(900)을 위임하나, ADMIN(900)은 ADMIN(900)을 위임 못 한다.
+     * 최상위 역할(SUPER_ADMIN)은 위에 아무것도 없으므로 API 위임 불가 — 시드/DB로만 구성한다.
+     */
+    public void validateGrantable(int requesterMaxPriority, int targetPriority) {
+        if (targetPriority >= requesterMaxPriority) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED, "대상 역할은 요청자와 동급이거나 상위라 위임/박탈할 수 없습니다");
         }
     }
 

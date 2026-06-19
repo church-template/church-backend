@@ -15,6 +15,7 @@ public record MeResponse(
         List<String> roles,
         List<String> permissions,
         int maxPriority,
+        boolean approved, // GALLERY_VIEW 보유 = 승인(MemberCard/MemberDetail과 동일 규칙)
         boolean termsAgreed,
         boolean privacyAgreed,
         LocalDateTime agreedAt) {
@@ -29,6 +30,7 @@ public record MeResponse(
                 m.getRoles().stream().map(Role::getName).sorted().toList(),
                 MemberAuthorities.permissions(m),
                 MemberAuthorities.maxPriority(m),
+                MemberAuthorities.isApproved(m),
                 m.isTermsAgreed(),
                 m.isPrivacyAgreed(),
                 m.getAgreedAt());

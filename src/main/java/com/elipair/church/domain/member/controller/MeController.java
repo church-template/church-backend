@@ -40,7 +40,7 @@ public class MeController {
                     JWT에 담기지 않은 최신 본인 정보를 DB에서 조회. 토큰값이 낡았을 때 라이브 값을 얻는 용도.
 
                     - 인증(JWT): 필요 — 로그인(본인)
-                    - 반환값: `MeResponse` — uuid·이름·전화번호·이메일·직분·역할·권한·maxPriority·약관 동의 상태(agreedAt 포함)
+                    - 반환값: `MeResponse` — uuid·이름·전화번호·이메일·직분·역할·권한·maxPriority·`approved`(GALLERY_VIEW 보유 = 승인)·약관 동의 상태(agreedAt 포함)
                     """)
     @GetMapping
     public MeResponse me(@AuthenticationPrincipal MemberPrincipal principal) {

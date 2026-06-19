@@ -16,10 +16,10 @@ Discord-style dynamic RBAC. See `docs/church-backend-spec.md` §3–§4 for the 
 
 ## Priority hierarchy guard (escalation prevention)
 
-A requester may only act on a role whose `priority` is **at or below** their own `maxPriority` (same level allowed). Strictly higher → `403`. Apply this identically to **all** of:
+Two priority rules, **split by operation**:
 
-- Grant/revoke a role to a member.
-- `PATCH /roles/{id}`, `DELETE /roles/{id}`, `PUT /roles/{id}/permissions`.
+- **Grant/revoke a role to a member** — target `priority` must be **strictly below** the requester's `maxPriority` (same level **blocked**). Only a strictly-higher role delegates/strips a lower one; a peer cannot. The top role (`SUPER_ADMIN`) has nothing above it → **never grantable via API; seed/DB only**. Equal-or-higher → `403`. (Validator: `validateGrantable`, used by `MemberRoleService`.)
+- **Modify the role itself** — `PATCH /roles/{id}`, `DELETE /roles/{id}`, `PUT /roles/{id}/permissions` — target `priority` must be **at or below** the requester's `maxPriority` (same level allowed). Strictly higher → `403`. (Validator: `validateAssignable` via `validateMutable`.)
 
 Additional hard stops:
 

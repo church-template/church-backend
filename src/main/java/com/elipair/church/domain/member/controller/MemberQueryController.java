@@ -33,7 +33,7 @@ public class MemberQueryController {
 
                     - 인증(JWT): 필요 — `MEMBER_MANAGE`
                     - 요청 파라미터: `q`(선택) — 이름 또는 전화번호 부분검색(없으면 전체) · `page`·`size`·`sort` — 페이지네이션
-                    - 반환값: `Page<MemberCardResponse>` — uuid·이름·전화번호·직분·역할·`approved`(MEMBER 보유 여부)·createdAt 카드 목록
+                    - 반환값: `Page<MemberCardResponse>` — uuid·이름·전화번호·직분·역할·`approved`(GALLERY_VIEW 보유 = 승인)·createdAt 카드 목록
                     """)
     @GetMapping
     public Page<MemberCardResponse> list(@RequestParam(required = false) String q, Pageable pageable) {
@@ -45,7 +45,7 @@ public class MemberQueryController {
 
                     - 인증(JWT): 필요 — `MEMBER_MANAGE`
                     - 경로 변수: `uuid` — 조회할 회원 uuid
-                    - 반환값: `MemberDetailResponse` — 이메일·직분·역할·권한·`approved`·약관 동의 상태 포함 상세
+                    - 반환값: `MemberDetailResponse` — 이메일·직분·역할·권한·`approved`(GALLERY_VIEW 보유 = 승인)·약관 동의 상태 포함 상세
                     """)
     @GetMapping("/{uuid}")
     public MemberDetailResponse detail(@PathVariable UUID uuid) {

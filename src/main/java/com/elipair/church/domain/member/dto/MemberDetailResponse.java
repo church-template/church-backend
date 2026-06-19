@@ -29,7 +29,7 @@ public record MemberDetailResponse(
                 m.getPosition() == null ? null : m.getPosition().getName(),
                 m.getRoles().stream().map(Role::getName).sorted().toList(),
                 MemberAuthorities.permissions(m),
-                m.hasRole("MEMBER"),
+                MemberAuthorities.isApproved(m),
                 m.isTermsAgreed(),
                 m.isPrivacyAgreed(),
                 m.getAgreedAt(),

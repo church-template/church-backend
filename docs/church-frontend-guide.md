@@ -408,7 +408,7 @@ async function saveWithRetry(id: number, edit: (cur: Detail) => UpdateReq) {
 |---|---|---|---|---|---|---|
 | **auth** | — | — | — | — | signup/login/refresh 공개, logout 인증 | — |
 | **member(me)** | — | — | uuid·name·phone·position·roles·permissions·maxPriority·약관 | — | 본인 인증 필요(익명 401) | — |
-| **member(admin)** | — | — | 목록/상세 + `approved`(MEMBER 보유) | — | 조회·수정 `MEMBER_MANAGE`, 역할부여/회수 `ROLE_MANAGE` | — |
+| **member(admin)** | — | — | 목록/상세 + `approved`(GALLERY_VIEW 보유 = 교인·권한보유 어드민) | — | 조회·수정 `MEMBER_MANAGE`, 역할부여/회수 `ROLE_MANAGE` | — |
 | **position** | `sortOrder,asc`(비페이징 평배열) | 없음 | id·name(한글)·sortOrder | — | **목록 공개**, 쓰기 `POSITION_MANAGE` | — |
 | **role** | `priority,desc`(비페이징 평배열) | 없음 | id·name·priority·isSystem·description·permissions | — | `ROLE_MANAGE` | — |
 | **permission** | `name,asc`(비페이징 평배열) | 없음 | id·name(영문)·description(한글) | — | `ROLE_MANAGE` | — |

@@ -89,6 +89,34 @@ class MemberRoleApiTest {
     }
 
     @Test
+    void admin_cannot_grant_peer_admin_role() throws Exception {
+        // 동급 위임 차단: ADMIN(900)이 ADMIN(900) 역할을 위임할 수 없다(슈퍼어드민만 어드민을 위임/박탈).
+        Member target = persist("01099990000", "승급대상");
+        Role admin = role("ADMIN"); // priority 900
+
+        mockMvc.perform(post("/api/admin/members/" + target.getUuid() + "/roles")
+                        .header("Authorization", roleManager(999L, 900)) // 요청자 maxPriority 900 == 대상 900
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"roleId\":" + admin.getId() + "}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void super_admin_can_grant_admin_role() throws Exception {
+        // 엄격히 하위 위임 허용: SUPER_ADMIN(1000)은 ADMIN(900)을 위임할 수 있다.
+        Member target = persist("01012340000", "어드민될사람");
+        Role admin = role("ADMIN"); // priority 900
+
+        mockMvc.perform(post("/api/admin/members/" + target.getUuid() + "/roles")
+                        .header("Authorization", roleManager(999L, 1000)) // 요청자 maxPriority 1000 > 900
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"roleId\":" + admin.getId() + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roles").value(org.hamcrest.Matchers.hasItem("ADMIN")));
+    }
+
+    @Test
     void changing_own_role_is_403() throws Exception {
         Member self = persist("01055556666", "본인");
         Role member = role("MEMBER");
@@ -98,6 +126,33 @@ class MemberRoleApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"roleId\":" + member.getId() + "}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void super_admin_can_revoke_admin_role() throws Exception {
+        // 강등(박탈): SUPER_ADMIN(1000)은 ADMIN(900)을 보유한 회원의 ADMIN 역할을 박탈할 수 있다.
+        Member target = persist("01023450000", "강등될어드민");
+        Role admin = role("ADMIN"); // priority 900
+        target.grantRole(admin);
+        memberRepository.saveAndFlush(target);
+
+        mockMvc.perform(delete("/api/admin/members/" + target.getUuid() + "/roles/" + admin.getId())
+                        .header("Authorization", roleManager(999L, 1000)))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void admin_cannot_revoke_peer_admin_role() throws Exception {
+        // 동급 차단: ADMIN(900)은 다른 ADMIN(900)의 역할을 박탈할 수 없다.
+        Member target = persist("01034560000", "동급어드민");
+        Role admin = role("ADMIN"); // priority 900
+        target.grantRole(admin);
+        memberRepository.saveAndFlush(target);
+
+        mockMvc.perform(delete("/api/admin/members/" + target.getUuid() + "/roles/" + admin.getId())
+                        .header("Authorization", roleManager(999L, 900)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
     }
 
     @Test

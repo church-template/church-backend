@@ -34,9 +34,9 @@ public class MemberRoleService {
     public MemberDetailResponse grant(UUID targetUuid, Long roleId, long requesterId, int requesterMaxPriority) {
         Member target = findActive(targetUuid);
         Role role = findRole(roleId);
-        // 1·2 가드는 항상(보유 여부 무관) 적용.
+        // 1·2 가드는 항상(보유 여부 무관) 적용. 위임은 엄격히 하위만(동급 차단).
         hierarchyValidator.validateNotSelf(requesterId, target.getId());
-        hierarchyValidator.validateAssignable(requesterMaxPriority, role.getPriority());
+        hierarchyValidator.validateGrantable(requesterMaxPriority, role.getPriority());
         target.grantRole(role); // 이미 보유면 no-op
         return MemberDetailResponse.from(target);
     }
@@ -46,7 +46,7 @@ public class MemberRoleService {
         Member target = findActive(targetUuid);
         Role role = findRole(roleId);
         hierarchyValidator.validateNotSelf(requesterId, target.getId());
-        hierarchyValidator.validateAssignable(requesterMaxPriority, role.getPriority());
+        hierarchyValidator.validateGrantable(requesterMaxPriority, role.getPriority());
         if (target.hasRole(SUPER_ADMIN) && SUPER_ADMIN.equals(role.getName())) {
             long activeSuperAdmins = memberRepository.countByRoles_NameAndDeletedAtIsNull(SUPER_ADMIN);
             hierarchyValidator.validateNotLastSuperAdmin(true, activeSuperAdmins);

@@ -28,6 +28,29 @@ class RoleHierarchyValidatorTest {
     }
 
     @Test
+    void grantable_rejects_equal_priority() {
+        // 위임/박탈은 동급 차단 — ADMIN(900)은 ADMIN(900)을 위임할 수 없다.
+        assertThatThrownBy(() -> validator.validateGrantable(900, 900))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    void grantable_rejects_higher_priority() {
+        assertThatThrownBy(() -> validator.validateGrantable(900, 1000))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    void grantable_allows_strictly_lower_priority() {
+        // SUPER_ADMIN(1000)은 ADMIN(900)을 위임할 수 있다.
+        assertThatCode(() -> validator.validateGrantable(1000, 900)).doesNotThrowAnyException();
+    }
+
+    @Test
     void mutable_rejects_system_role_regardless_of_priority() {
         assertThatThrownBy(() -> validator.validateMutable(1000, 100, true)).isInstanceOf(BusinessException.class);
     }

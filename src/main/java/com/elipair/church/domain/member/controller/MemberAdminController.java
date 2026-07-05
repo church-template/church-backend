@@ -65,8 +65,7 @@ public class MemberAdminController {
                     """)
     @PutMapping("/{uuid}/position")
     @PreAuthorize("hasAuthority('MEMBER_MANAGE')")
-    public MemberDetailResponse changePosition(
-            @PathVariable UUID uuid, @RequestBody PositionAssignRequest request) {
+    public MemberDetailResponse changePosition(@PathVariable UUID uuid, @RequestBody PositionAssignRequest request) {
         return memberService.changePosition(uuid, request.positionId());
     }
 

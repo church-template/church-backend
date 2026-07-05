@@ -141,10 +141,17 @@ class MemberPositionApiTest {
         Long pastor = positionId("목사", 1);
 
         mockMvc.perform(put("/api/admin/members/" + self.getUuid() + "/position")
-                        .header("Authorization",
-                                "Bearer " + provider.issueAccess(
-                                        new MemberPrincipal(self.getId(), self.getUuid().toString(), "본인", 900),
-                                        null, List.of("MEMBER_MANAGE")))
+                        .header(
+                                "Authorization",
+                                "Bearer "
+                                        + provider.issueAccess(
+                                                new MemberPrincipal(
+                                                        self.getId(),
+                                                        self.getUuid().toString(),
+                                                        "본인",
+                                                        900),
+                                                null,
+                                                List.of("MEMBER_MANAGE")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"positionId\":" + pastor + "}"))
                 .andExpect(status().isOk())

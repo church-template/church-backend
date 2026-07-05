@@ -1,0 +1,8 @@
+# 프로덕션 오버레이 — 서버에서 base와 함께 사용한다:
+#   IMAGE_TAG=<버전> docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# backend의 로컬 build 대신 GHCR에서 pull한 이미지를 쓴다.
+# base의 build 키는 병합 시 남지만, pull된 이미지가 존재하는 한 up이 빌드를 시도하지 않는다
+# (서버에는 소스가 없으므로 pull 실패 시 빌드도 실패 = 배포 실패가 조용히 숨지 않는다).
+services:
+  backend:
+    image: ghcr.io/church-template/church-backend:${IMAGE_TAG:-latest}

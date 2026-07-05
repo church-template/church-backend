@@ -112,7 +112,10 @@ jobs:
           script: |
             set -e
             cd /srv/church-backend
+            export IMAGE_NAME="${{ env.IMAGE_NAME }}"
             export IMAGE_TAG="${{ env.IMAGE_TAG }}"
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+            # 헬스 게이트 — 기동 실패 시 워크플로우를 red로 (JVM 기동 + healthcheck start_period 감안 최대 180초 대기)
+            timeout 180 bash -c 'until curl -fs http://localhost:8080/actuator/health >/dev/null; do sleep 5; done'
             docker image prune -f

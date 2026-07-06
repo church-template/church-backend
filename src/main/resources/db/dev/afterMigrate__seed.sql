@@ -207,6 +207,16 @@ INSERT INTO content_tags (tag_id, resource_type, resource_id) VALUES
     (9004, 'GALLERY_ALBUM', 9002)
 ON CONFLICT DO NOTHING;
 
+-- ── 통독 챌린지 (V13) ────────────────────────────────────────────────────────
+-- 진행 중 2건: 전교인 전체(30일차) + 학생부 신약(10일차). 참여·로그는 앱에서 만들며 시드하지 않는다.
+INSERT INTO bible_challenges (id, title, description, start_book, end_book, start_date, target_days,
+                              created_at, created_by, version) VALUES
+    (9000, '2026 전교인 100일 통독', '창세기부터 요한계시록까지 함께 읽는 100일 여정입니다.',
+     1, 66, CURRENT_DATE - 30, 100, now(), 9001, 0),
+    (9001, '학생부 신약 60일 챌린지', '여름방학 동안 신약 27권을 함께 읽어요.',
+     40, 66, CURRENT_DATE - 10, 60, now(), 9001, 0)
+ON CONFLICT (id) DO NOTHING;
+
 -- ── 시퀀스 동기화 (9000블록 예약) ────────────────────────────────────────────
 -- 각 IDENTITY 시퀀스를 최소 9999로 끌어올려 9000~9999 전체를 시드 전용으로 예약한다.
 -- → 앱이 만드는 새 행(회원 가입·관리자 콘텐츠)은 10000+에서 시작하므로, 시드 블록을 절대 잠식하지 않는다.
@@ -223,3 +233,6 @@ SELECT setval(pg_get_serial_sequence('departments',     'id'), GREATEST((SELECT 
 SELECT setval(pg_get_serial_sequence('gallery_albums',  'id'), GREATEST((SELECT MAX(id) FROM gallery_albums),  9999));
 SELECT setval(pg_get_serial_sequence('gallery_photos',  'id'), GREATEST((SELECT MAX(id) FROM gallery_photos),  9999));
 SELECT setval(pg_get_serial_sequence('bulletins',       'id'), GREATEST((SELECT MAX(id) FROM bulletins),       9999));
+SELECT setval(pg_get_serial_sequence('bible_challenges',        'id'), GREATEST((SELECT MAX(id) FROM bible_challenges),        9999));
+SELECT setval(pg_get_serial_sequence('challenge_participations','id'), GREATEST((SELECT MAX(id) FROM challenge_participations), 9999));
+SELECT setval(pg_get_serial_sequence('challenge_reading_logs',  'id'), GREATEST((SELECT MAX(id) FROM challenge_reading_logs),   9999));

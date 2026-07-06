@@ -6,21 +6,26 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.elipair.church.domain.challenge.dto.ChallengeReadRequest;
+import com.elipair.church.domain.challenge.dto.MyParticipationResponse;
 import com.elipair.church.domain.challenge.dto.MyProgressResponse;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 class ChallengeProgressServiceTest {
 
@@ -67,6 +72,20 @@ class ChallengeProgressServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
                         .isEqualTo(ErrorCode.DUPLICATE_RESOURCE));
         verify(participationRepository, never()).save(any());
+    }
+
+    @Test
+    void join_returns_fresh_progress() {
+        when(challengeRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(ntChallenge()));
+        when(participationRepository.existsByChallengeIdAndMemberIdAndDeletedAtIsNull(1L, 2L)).thenReturn(false);
+        when(participationRepository.save(any())).thenReturn(ChallengeParticipation.create(1L, 2L));
+
+        MyProgressResponse res = service.join(1L, 2L);
+
+        assertThat(res.chaptersRead()).isZero();
+        assertThat(res.roundsCompleted()).isZero();
+        assertThat(res.progressRate()).isZero();
+        assertThat(res.currentPosition()).isNull();
     }
 
     @Test
@@ -244,6 +263,35 @@ class ChallengeProgressServiceTest {
         stubJoined(ended);
 
         assertThat(service.myProgress(1L, 2L).paceDays()).isNull();
+    }
+
+    // ---- myParticipations ----
+
+    @Test
+    void my_participations_maps_fields_even_for_soft_deleted_challenge() {
+        // 미영속 엔티티는 id가 null → spy로 id만 부여(NoticeServiceTest의 mock 엔티티 패턴)
+        BibleChallenge deleted = spy(ntChallenge());
+        deleted.softDelete(); // 이력 보존이 이 메서드의 존재 이유 — findAllById는 deleted_at을 거르지 않는다
+        when(deleted.getId()).thenReturn(7L);
+        // createdAt은 JPA 감사 필드(순수 단위 테스트에선 null) → 엔티티를 mock으로 스텁
+        ChallengeParticipation p = mock(ChallengeParticipation.class);
+        when(p.getChallengeId()).thenReturn(7L);
+        when(p.getCreatedAt()).thenReturn(LocalDateTime.of(2026, 6, 28, 10, 0));
+        when(p.getChaptersRead()).thenReturn(130);
+        when(p.getRoundsCompleted()).thenReturn(1);
+        when(participationRepository.findByMemberIdAndDeletedAtIsNull(eq(2L), any()))
+                .thenReturn(new PageImpl<>(List.of(p)));
+        when(challengeRepository.findAllById(any())).thenReturn(List.of(deleted));
+
+        MyParticipationResponse res = service.myParticipations(2L, PageRequest.of(0, 10))
+                .getContent()
+                .get(0);
+
+        assertThat(res.challenge().title()).isEqualTo("신약 60일");
+        assertThat(res.completed()).isTrue(); // rounds >= 1
+        assertThat(res.roundsCompleted()).isEqualTo(1);
+        assertThat(res.joinedAt()).isEqualTo(LocalDate.of(2026, 6, 28));
+        assertThat(res.progressRate()).isEqualTo(50.0); // 130/260
     }
 
     // ---- myLogs ----

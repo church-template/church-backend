@@ -1,5 +1,6 @@
 package com.elipair.church.domain.member;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -68,7 +69,8 @@ class MeApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("홍길동"))
                 .andExpect(jsonPath("$.roles[0]").value("MEMBER"))
-                .andExpect(jsonPath("$.permissions[0]").value("GALLERY_VIEW"))
+                // V13 이후 MEMBER = GALLERY_VIEW + CHALLENGE_PARTICIPATE, 순서는 계약이 아니라 전체 집합으로 단언
+                .andExpect(jsonPath("$.permissions", containsInAnyOrder("GALLERY_VIEW", "CHALLENGE_PARTICIPATE")))
                 .andExpect(jsonPath("$.approved").value(true)) // GALLERY_VIEW 보유 = 승인
                 .andExpect(jsonPath("$.termsAgreed").value(true));
     }

@@ -24,6 +24,11 @@ public class SecuredTestController {
         return "gallery";
     }
 
+    @GetMapping("/api/bible-challenges/ping")
+    public String challengePing() {
+        return "challenge";
+    }
+
     @GetMapping("/api/me/ping")
     @PreAuthorize("isAuthenticated()")
     public String mePing() {

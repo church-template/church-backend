@@ -26,7 +26,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * 경로 3분법(스펙 §4.3): /api/admin/** 인증(세부 권한은 메서드 @PreAuthorize), /api/gallery/** GALLERY_VIEW,
- * 그 외 공개. JWT 필터·인증 실패 RFC 7807 변환·CORS·메서드 보안을 배선한다.
+ * /api/bible-challenges/** CHALLENGE_PARTICIPATE, 그 외 공개. JWT 필터·인증 실패 RFC 7807 변환·CORS·메서드 보안을 배선한다.
  */
 @Configuration
 @EnableWebSecurity
@@ -69,6 +69,8 @@ public class SecurityConfig {
                         .authenticated()
                         .requestMatchers("/api/gallery/**")
                         .hasAuthority("GALLERY_VIEW")
+                        .requestMatchers("/api/bible-challenges/**")
+                        .hasAuthority("CHALLENGE_PARTICIPATE")
                         .anyRequest()
                         .permitAll())
                 .exceptionHandling(ex ->

@@ -23,7 +23,7 @@ class RbacSeedIntegrityTest {
     private RoleRepository roleRepository;
 
     @Test
-    void seeds_twelve_permissions() {
+    void seeds_fourteen_permissions() {
         assertThat(permissionRepository.findAllByOrderByNameAsc())
                 .extracting(Permission::getName)
                 .containsExactlyInAnyOrder(
@@ -38,7 +38,9 @@ class RbacSeedIntegrityTest {
                         "TAG_MANAGE",
                         "GALLERY_WRITE",
                         "GALLERY_VIEW",
-                        "BULLETIN_WRITE");
+                        "BULLETIN_WRITE",
+                        "CHALLENGE_MANAGE",
+                        "CHALLENGE_PARTICIPATE");
     }
 
     @Test
@@ -61,11 +63,11 @@ class RbacSeedIntegrityTest {
         Map<String, Role> byName = roleRepository.findAllByOrderByPriorityDesc().stream()
                 .collect(Collectors.toMap(Role::getName, Function.identity()));
 
-        assertThat(byName.get("SUPER_ADMIN").getPermissions()).hasSize(12);
-        assertThat(byName.get("ADMIN").getPermissions()).hasSize(12);
+        assertThat(byName.get("SUPER_ADMIN").getPermissions()).hasSize(14);
+        assertThat(byName.get("ADMIN").getPermissions()).hasSize(14);
         assertThat(byName.get("MEMBER").getPermissions())
                 .extracting(Permission::getName)
-                .containsExactly("GALLERY_VIEW");
+                .containsExactlyInAnyOrder("GALLERY_VIEW", "CHALLENGE_PARTICIPATE");
         assertThat(byName.get("USER").getPermissions()).isEmpty();
     }
 

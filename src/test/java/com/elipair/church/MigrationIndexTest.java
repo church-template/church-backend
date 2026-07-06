@@ -110,4 +110,23 @@ class MigrationIndexTest {
         assertThat(rules).as("V12 주보 media_id FK 존재").hasSize(1);
         assertThat((String) rules.get(0)).as("ON DELETE SET NULL").isEqualTo("SET NULL");
     }
+
+    @Test
+    void bible_challenges_start_date_is_partial_on_active_rows() {
+        assertThat(indexDef("idx_bible_challenges_start_date"))
+                .as("V13 챌린지 목록 인덱스")
+                .isNotNull()
+                .contains("start_date")
+                .contains("deleted_at IS NULL");
+    }
+
+    @Test
+    void challenge_participations_unique_is_partial_on_active_rows() {
+        assertThat(indexDef("uq_challenge_participations_active"))
+                .as("V13 참여 부분 유니크(취소 후 재참여 허용)")
+                .isNotNull()
+                .contains("challenge_id")
+                .contains("member_id")
+                .contains("deleted_at IS NULL");
+    }
 }

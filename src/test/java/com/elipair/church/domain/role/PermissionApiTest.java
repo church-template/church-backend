@@ -38,11 +38,11 @@ class PermissionApiTest {
     }
 
     @Test
-    void lists_twelve_permissions_sorted_by_name() throws Exception {
+    void lists_fourteen_permissions_sorted_by_name() throws Exception {
         mockMvc.perform(get("/api/admin/permissions").header("Authorization", roleManager()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$.length()").value(12))
+                .andExpect(jsonPath("$.length()").value(14)) // V13 CHALLENGE_* 2건 포함
                 .andExpect(jsonPath("$[0].name").value("BULLETIN_WRITE")); // name ASC 첫 항목
     }
 

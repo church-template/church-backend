@@ -36,8 +36,8 @@
 | id | BIGSERIAL PK | |
 | title | VARCHAR(100) NOT NULL | "2026 사순절 100일 통독" |
 | description | TEXT NULL | 소개 (마크다운 raw — 기존 관례) |
-| start_book | SMALLINT NOT NULL | 1~66 |
-| end_book | SMALLINT NOT NULL | 1~66, `start_book <= end_book` CHECK |
+| start_book | INT NOT NULL | 1~66 (엔티티 int 매핑 정합 — 구현 중 SMALLINT에서 변경) |
+| end_book | INT NOT NULL | 1~66, `start_book <= end_book` CHECK |
 | start_date | DATE NOT NULL | |
 | target_days | INT NOT NULL | > 0. 종료일 = `start_date + target_days - 1`(포함), 하루 목표 = `⌈구간 장 수 / target_days⌉` — 둘 다 파생, 저장 안 함 |
 | (BaseEntity) | | created_at/updated_at/created_by/updated_by/deleted_at/version |

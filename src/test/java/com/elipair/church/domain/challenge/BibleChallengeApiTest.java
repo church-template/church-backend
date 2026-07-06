@@ -371,4 +371,29 @@ class BibleChallengeApiTest {
                 .andExpect(jsonPath("$.content[0].roundsCompleted").value(1))
                 .andExpect(jsonPath("$.content[0].challenge.title").value("학생부 신약 60일"));
     }
+
+    /** 날짜 쿼리 파라미터(@DateTimeFormat) 왕복 검증 — 어제 기록 → ?date= 취소 → ?from=&to= 빈 배열. */
+    @Test
+    void date_query_params_round_trip() throws Exception {
+        long id = createNtChallenge();
+        String yesterday = LocalDate.now().minusDays(1).toString();
+        mockMvc.perform(post("/api/bible-challenges/" + id + "/join").header("Authorization", memberToken()))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/bible-challenges/" + id + "/read")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chapters\":5,\"date\":\"%s\"}".formatted(yesterday)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.chaptersRead").value(5));
+
+        mockMvc.perform(delete("/api/bible-challenges/" + id + "/read?date=" + yesterday)
+                        .header("Authorization", memberToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.chaptersRead").value(0));
+
+        mockMvc.perform(get("/api/bible-challenges/" + id + "/my-logs?from=" + yesterday + "&to=" + yesterday)
+                        .header("Authorization", memberToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
 }

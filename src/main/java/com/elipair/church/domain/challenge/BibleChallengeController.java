@@ -87,6 +87,7 @@ public class BibleChallengeController {
                     "오늘 N장 읽음"을 기록한다. 본문 생략/빈 객체 = 해당 날짜의 남은 목표치.
 
                     - 인증(JWT): 필요 — `CHALLENGE_PARTICIPATE`
+                    - 경로 변수: `id` — 챌린지 ID
                     - 요청 본문: `ChallengeReadRequest` — `chapters`(기본 남은 목표치)·`date`(기본 오늘, 소급 = 챌린지 시작일~오늘)
                     - 반환값: `MyProgressResponse` — 갱신된 대시보드
                     - 부수효과: 같은 날 재기록은 누적 · 구간 끝 도달 시 회독 +1·초과분 이월 · 동시 클릭 시 409
@@ -104,6 +105,7 @@ public class BibleChallengeController {
                     해당 날짜의 기록을 취소한다(실수 클릭 복구).
 
                     - 인증(JWT): 필요 — `CHALLENGE_PARTICIPATE`
+                    - 경로 변수: `id` — 챌린지 ID
                     - 요청 파라미터: `date`(기본 오늘)
                     - 반환값: `MyProgressResponse` — 롤백된 대시보드
                     - 부수효과: 해당 날짜 로그 물리 삭제 + 포인터 롤백(회독 경계 역이월) · 로그 없으면 404
@@ -120,6 +122,7 @@ public class BibleChallengeController {
                     진행률·현재 위치·오늘 현황·스트릭·회독·페이스를 한 번에 반환한다(UI 원샷).
 
                     - 인증(JWT): 필요 — `CHALLENGE_PARTICIPATE`
+                    - 경로 변수: `id` — 챌린지 ID
                     - 반환값: `MyProgressResponse` — `currentPosition` null=회독 시작 전, `paceDays` null=기간 종료
                     """)
     @GetMapping("/api/bible-challenges/{id}/my-progress")
@@ -131,6 +134,7 @@ public class BibleChallengeController {
                     달력 히트맵용 날짜별 로그(배열 — 페이지 아님).
 
                     - 인증(JWT): 필요 — `CHALLENGE_PARTICIPATE`
+                    - 경로 변수: `id` — 챌린지 ID
                     - 요청 파라미터: `from`·`to`(생략 시 챌린지 기간 전체)
                     - 반환값: `List<ReadingLogResponse>` — 날짜 오름차순
                     """)

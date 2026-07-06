@@ -21,7 +21,6 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
@@ -31,10 +30,15 @@ jobs:
     # image_tag 지정 재배포(롤백) 시에는 빌드를 건너뛴다
     if: ${{ github.event_name == 'push' || inputs.image_tag == '' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # GHCR push는 이 job만 — 최소 권한(deploy job엔 불필요)
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false # 이후 스텝(서드파티 액션)에 토큰 잔류 방지
 
       - name: version.yml에서 버전 추출
         id: version
@@ -91,6 +95,8 @@ jobs:
 
       - uses: actions/checkout@v5
         if: steps.gate.outputs.ready == 'true'
+        with:
+          persist-credentials: false # 이후 스텝(서드파티 액션)에 토큰 잔류 방지
 
       - name: compose 파일 서버 동기화
         if: steps.gate.outputs.ready == 'true'
@@ -109,11 +115,12 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # envs로 전달해 원격 셸에 export — script에 ${{ }} 직접 템플릿하면
+          # workflow_dispatch 입력값이 따옴표를 깨고 명령 주입될 수 있다(zizmor template-injection)
+          envs: IMAGE_NAME,IMAGE_TAG
           script: |
             set -e
             cd /srv/church-backend
-            export IMAGE_NAME="${{ env.IMAGE_NAME }}"
-            export IMAGE_TAG="${{ env.IMAGE_TAG }}"
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
             # 헬스 게이트 — 기동 실패 시 워크플로우를 red로 (JVM 기동 + healthcheck start_period 감안 최대 180초 대기)

@@ -68,6 +68,14 @@ class BibleChallengeServiceTest {
     }
 
     @Test
+    void patch_blank_title_throws_400_before_loading_entity() {
+        assertThatThrownBy(() -> service.patch(1L, new ChallengePatchRequest("  ", null, null, null, null, null, 0L)))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+        verify(repository, never()).findByIdAndDeletedAtIsNull(any());
+    }
+
+    @Test
     void patch_with_stale_version_throws_409() {
         BibleChallenge c = ntChallenge();
         when(repository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(c));

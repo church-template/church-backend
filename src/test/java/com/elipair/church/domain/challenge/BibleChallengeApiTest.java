@@ -49,7 +49,15 @@ class BibleChallengeApiTest {
     @Autowired
     private MemberRepository memberRepository;
 
+    /** 서버의 "오늘"(APP_TIMEZONE) 기준 — JVM 기본 존과 다르면 날짜 경계 테스트가 flake라 앱 Clock을 그대로 쓴다. */
+    @Autowired
+    private java.time.Clock clock;
+
     private Long memberId;
+
+    private LocalDate today() {
+        return LocalDate.now(clock);
+    }
 
     @BeforeEach
     void seed() {
@@ -94,7 +102,7 @@ class BibleChallengeApiTest {
                         .content("""
                                 {"title":"학생부 신약 60일","description":"방학 통독","startBook":40,"endBook":66,
                                  "startDate":"%s","targetDays":60}
-                                """.formatted(LocalDate.now().minusDays(9))))
+                                """.formatted(today().minusDays(9))))
                 .andExpect(status().isCreated())
                 .andReturn()
                 .getResponse()
@@ -274,8 +282,7 @@ class BibleChallengeApiTest {
         mockMvc.perform(post("/api/bible-challenges/" + id + "/read")
                         .header("Authorization", memberToken())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"chapters\":5,\"date\":\"%s\"}"
-                                .formatted(LocalDate.now().minusDays(1))))
+                        .content("{\"chapters\":5,\"date\":\"%s\"}".formatted(today().minusDays(1))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.streakDays").value(2))
                 .andExpect(jsonPath("$.chaptersRead").value(10));
@@ -289,8 +296,7 @@ class BibleChallengeApiTest {
         mockMvc.perform(post("/api/bible-challenges/" + id + "/read")
                         .header("Authorization", memberToken())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"chapters\":5,\"date\":\"%s\"}"
-                                .formatted(LocalDate.now().plusDays(1))))
+                        .content("{\"chapters\":5,\"date\":\"%s\"}".formatted(today().plusDays(1))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
     }
@@ -347,7 +353,7 @@ class BibleChallengeApiTest {
 
         mockMvc.perform(get("/api/bible-challenges/" + id + "/my-logs").header("Authorization", memberToken()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].readDate").value(LocalDate.now().toString()))
+                .andExpect(jsonPath("$[0].readDate").value(today().toString()))
                 .andExpect(jsonPath("$[0].chapters").value(5));
     }
 
@@ -376,7 +382,7 @@ class BibleChallengeApiTest {
     @Test
     void date_query_params_round_trip() throws Exception {
         long id = createNtChallenge();
-        String yesterday = LocalDate.now().minusDays(1).toString();
+        String yesterday = today().minusDays(1).toString();
         mockMvc.perform(post("/api/bible-challenges/" + id + "/join").header("Authorization", memberToken()))
                 .andExpect(status().isCreated());
         mockMvc.perform(post("/api/bible-challenges/" + id + "/read")

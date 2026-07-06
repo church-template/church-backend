@@ -55,6 +55,10 @@ public class BibleChallengeService {
 
     @Transactional
     public ChallengeDetailResponse patch(Long id, ChallengePatchRequest req) {
+        // PATCH의 title은 null=미변경이라 @NotBlank를 못 쓴다 — 빈 문자열만 여기서 거부(create 불변조건 유지).
+        if (req.title() != null && req.title().isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "title은 빈 문자열일 수 없습니다");
+        }
         BibleChallenge challenge = load(id);
         checkVersion(challenge, req.version());
         boolean structureChange =

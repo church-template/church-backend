@@ -1,0 +1,128 @@
+# CD — deploy 브랜치 push 시: GHCR 멀티아치 이미지 push → OCI VM에 SSH 배포.
+# 배포는 항상 명시적 버전 태그로 pull한다(latest 아님) — 서버에 떠 있는 버전이 항상 추적 가능.
+# workflow_dispatch의 image_tag 입력 = 해당 태그로 빌드 없이 재배포(롤백 경로).
+# DEPLOY_HOST 시크릿이 비어 있으면 서버 배포는 건너뛰고 이미지 push까지만 수행한다
+# (서버 준비 전에도 파이프라인이 그린 상태를 유지).
+name: Deploy
+
+on:
+  push:
+    branches: ["deploy"]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "재배포할 이미지 태그 (비우면 새로 빌드해서 배포)"
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  build-push:
+    # image_tag 지정 재배포(롤백) 시에는 빌드를 건너뛴다
+    if: ${{ github.event_name == 'push' || inputs.image_tag == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # GHCR push는 이 job만 — 최소 권한(deploy job엔 불필요)
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false # 이후 스텝(서드파티 액션)에 토큰 잔류 방지
+
+      - name: version.yml에서 버전 추출
+        id: version
+        run: |
+          chmod +x .github/scripts/version_manager.sh
+          VERSION=$(./.github/scripts/version_manager.sh get | tail -n 1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "이미지 버전: $VERSION"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: GHCR 로그인
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 멀티아치 이미지 빌드 & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-push
+    # build-push가 skip된 경우(image_tag 재배포)에도 실행되어야 한다
+    if: ${{ always() && (needs.build-push.result == 'success' || needs.build-push.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    env:
+      # image_tag 입력이 있으면 그 태그로, 없으면 방금 빌드한 버전으로 배포
+      IMAGE_TAG: ${{ inputs.image_tag != '' && inputs.image_tag || needs.build-push.outputs.version }}
+    steps:
+      # 시크릿은 job 수준 if에서 참조할 수 없어 게이트 스텝으로 판별한다
+      - name: 배포 가능 여부 확인
+        id: gate
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          if [ -n "$DEPLOY_HOST" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DEPLOY_HOST 시크릿이 없어 서버 배포를 건너뜁니다(이미지 push까지만 수행)."
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          persist-credentials: false # 이후 스텝(서드파티 액션)에 토큰 잔류 방지
+
+      - name: compose 파일 서버 동기화
+        if: steps.gate.outputs.ready == 'true'
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "docker-compose.yml,docker-compose.prod.yml"
+          target: /srv/church-backend
+
+      - name: 서버 배포 (pull & up)
+        if: steps.gate.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # envs로 전달해 원격 셸에 export — script에 ${{ }} 직접 템플릿하면
+          # workflow_dispatch 입력값이 따옴표를 깨고 명령 주입될 수 있다(zizmor template-injection)
+          envs: IMAGE_NAME,IMAGE_TAG
+          script: |
+            set -e
+            cd /srv/church-backend
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+            # 헬스 게이트 — 기동 실패 시 워크플로우를 red로 (JVM 기동 + healthcheck start_period 감안 최대 180초 대기)
+            timeout 180 bash -c 'until curl -fs http://localhost:8080/actuator/health >/dev/null; do sleep 5; done'
+            docker image prune -f

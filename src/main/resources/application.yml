@@ -54,3 +54,5 @@ cache:
   ttl: ${CACHE_TTL:60} # 캐시 TTL(초). /api/main 통합 조회 캐싱(스펙 §9)
 view:
   flush-interval: ${VIEW_FLUSH_INTERVAL:60000} # 조회수 버퍼 → DB 반영 주기(ms, 스펙 §9)
+app:
+  timezone: ${APP_TIMEZONE:Asia/Seoul} # 통독 챌린지 "오늘" 판정 기준 시간대(설계 §5)

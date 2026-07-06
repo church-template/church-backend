@@ -66,8 +66,9 @@ public class ChallengeProgressService {
         if (date.isBefore(challenge.getStartDate()) || date.isAfter(today)) {
             throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "기록 날짜는 챌린지 시작일부터 오늘까지만 가능합니다");
         }
-        ChallengeReadingLog existing =
-                logRepository.findByParticipationIdAndReadDate(participation.getId(), date).orElse(null);
+        ChallengeReadingLog existing = logRepository
+                .findByParticipationIdAndReadDate(participation.getId(), date)
+                .orElse(null);
         int logged = existing != null ? existing.getChapters() : 0;
         int chapters = req.chapters() != null ? req.chapters() : Math.max(challenge.dailyGoal() - logged, 0);
         if (chapters <= 0) {
@@ -121,10 +122,12 @@ public class ChallengeProgressService {
         Page<ChallengeParticipation> page =
                 participationRepository.findByMemberIdAndDeletedAtIsNull(memberId, pageable);
         // 소프트삭제된 챌린지도 이력에 표시(참여 기록 보존) — findAllById는 deleted_at을 거르지 않는다.
-        Map<Long, BibleChallenge> challenges = challengeRepository
-                .findAllById(page.map(ChallengeParticipation::getChallengeId).getContent())
-                .stream()
-                .collect(Collectors.toMap(BibleChallenge::getId, Function.identity()));
+        Map<Long, BibleChallenge> challenges =
+                challengeRepository
+                        .findAllById(
+                                page.map(ChallengeParticipation::getChallengeId).getContent())
+                        .stream()
+                        .collect(Collectors.toMap(BibleChallenge::getId, Function.identity()));
         // ponytail: 페이지당 참여별 스트릭 조회 N회(기본 10) — 인덱스 조회라 충분, 병목 시 일괄 조회로 교체.
         return page.map(p -> {
             BibleChallenge c = challenges.get(p.getChallengeId());
@@ -198,8 +201,7 @@ public class ChallengeProgressService {
             return null;
         }
         long elapsedDays = Math.min(
-                Math.max(ChronoUnit.DAYS.between(challenge.getStartDate(), today) + 1, 0),
-                challenge.getTargetDays());
+                Math.max(ChronoUnit.DAYS.between(challenge.getStartDate(), today) + 1, 0), challenge.getTargetDays());
         long expected = Math.min(elapsedDays * challenge.dailyGoal(), challenge.totalChapters());
         long actual = p.totalChaptersRead(challenge.totalChapters());
         return Math.toIntExact(Math.round((actual - expected) / (double) challenge.dailyGoal()));

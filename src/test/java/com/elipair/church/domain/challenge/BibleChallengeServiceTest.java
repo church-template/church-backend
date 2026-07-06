@@ -25,6 +25,7 @@ class BibleChallengeServiceTest {
 
     /** 고정 "오늘" = 2026-07-06 (KST). */
     private static final Clock FIXED = Clock.fixed(Instant.parse("2026-07-06T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+
     private static final LocalDate TODAY = LocalDate.of(2026, 7, 6);
 
     private BibleChallengeRepository repository;
@@ -48,8 +49,8 @@ class BibleChallengeServiceTest {
         BibleChallenge saved = ntChallenge();
         when(repository.save(any(BibleChallenge.class))).thenReturn(saved);
 
-        ChallengeDetailResponse res = service.create(
-                new ChallengeCreateRequest("학생부 신약 60일", "설명", 40, 66, LocalDate.of(2026, 6, 27), 60));
+        ChallengeDetailResponse res =
+                service.create(new ChallengeCreateRequest("학생부 신약 60일", "설명", 40, 66, LocalDate.of(2026, 6, 27), 60));
 
         assertThat(res.totalChapters()).isEqualTo(260);
         assertThat(res.dailyGoal()).isEqualTo(5);
@@ -60,8 +61,7 @@ class BibleChallengeServiceTest {
 
     @Test
     void create_with_inverted_book_range_throws_400() {
-        assertThatThrownBy(() -> service.create(
-                        new ChallengeCreateRequest("역순", null, 66, 40, TODAY, 100)))
+        assertThatThrownBy(() -> service.create(new ChallengeCreateRequest("역순", null, 66, 40, TODAY, 100)))
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
                         .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
         verify(repository, never()).save(any());
@@ -96,7 +96,8 @@ class BibleChallengeServiceTest {
         when(repository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(c));
         when(participationRepository.existsByChallengeIdAndDeletedAtIsNull(1L)).thenReturn(true);
 
-        ChallengeDetailResponse res = service.patch(1L, new ChallengePatchRequest("바뀐 제목", null, null, null, null, null, 0L));
+        ChallengeDetailResponse res =
+                service.patch(1L, new ChallengePatchRequest("바뀐 제목", null, null, null, null, null, 0L));
 
         assertThat(res.title()).isEqualTo("바뀐 제목");
         verify(repository).flush();
@@ -125,7 +126,8 @@ class BibleChallengeServiceTest {
     @Test
     void get_marks_joined_for_participant() {
         when(repository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(ntChallenge()));
-        when(participationRepository.existsByChallengeIdAndMemberIdAndDeletedAtIsNull(1L, 2L)).thenReturn(true);
+        when(participationRepository.existsByChallengeIdAndMemberIdAndDeletedAtIsNull(1L, 2L))
+                .thenReturn(true);
 
         assertThat(service.get(1L, 2L).joined()).isTrue();
     }

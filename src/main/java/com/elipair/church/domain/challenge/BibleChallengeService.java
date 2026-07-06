@@ -57,10 +57,8 @@ public class BibleChallengeService {
     public ChallengeDetailResponse patch(Long id, ChallengePatchRequest req) {
         BibleChallenge challenge = load(id);
         checkVersion(challenge, req.version());
-        boolean structureChange = req.startBook() != null
-                || req.endBook() != null
-                || req.startDate() != null
-                || req.targetDays() != null;
+        boolean structureChange =
+                req.startBook() != null || req.endBook() != null || req.startDate() != null || req.targetDays() != null;
         if (structureChange && participationRepository.existsByChallengeIdAndDeletedAtIsNull(id)) {
             throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "참여자가 있는 챌린지의 구간·기간은 수정할 수 없습니다");
         }

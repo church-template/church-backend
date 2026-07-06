@@ -6,6 +6,7 @@ import com.elipair.church.domain.challenge.dto.ChallengeReadRequest;
 import com.elipair.church.domain.challenge.dto.MyParticipationResponse;
 import com.elipair.church.domain.challenge.dto.MyProgressResponse;
 import com.elipair.church.domain.challenge.dto.ReadingLogResponse;
+import com.elipair.church.global.security.MemberPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -26,7 +27,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import com.elipair.church.global.security.MemberPrincipal;
 
 /**
  * 통독 챌린지 회원 API(설계 §3). 인가는 SecurityConfig 경로 규칙(/api/bible-challenges/** → CHALLENGE_PARTICIPATE) —

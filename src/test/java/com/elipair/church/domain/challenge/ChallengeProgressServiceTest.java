@@ -31,6 +31,7 @@ class ChallengeProgressServiceTest {
 
     /** 고정 "오늘" = 2026-07-06 (KST). */
     private static final Clock FIXED = Clock.fixed(Instant.parse("2026-07-06T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+
     private static final LocalDate TODAY = LocalDate.of(2026, 7, 6);
 
     private BibleChallengeRepository challengeRepository;
@@ -66,7 +67,8 @@ class ChallengeProgressServiceTest {
     @Test
     void join_duplicate_throws_409() {
         when(challengeRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(ntChallenge()));
-        when(participationRepository.existsByChallengeIdAndMemberIdAndDeletedAtIsNull(1L, 2L)).thenReturn(true);
+        when(participationRepository.existsByChallengeIdAndMemberIdAndDeletedAtIsNull(1L, 2L))
+                .thenReturn(true);
 
         assertThatThrownBy(() -> service.join(1L, 2L))
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
@@ -77,7 +79,8 @@ class ChallengeProgressServiceTest {
     @Test
     void join_returns_fresh_progress() {
         when(challengeRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(ntChallenge()));
-        when(participationRepository.existsByChallengeIdAndMemberIdAndDeletedAtIsNull(1L, 2L)).thenReturn(false);
+        when(participationRepository.existsByChallengeIdAndMemberIdAndDeletedAtIsNull(1L, 2L))
+                .thenReturn(false);
         when(participationRepository.save(any())).thenReturn(ChallengeParticipation.create(1L, 2L));
 
         MyProgressResponse res = service.join(1L, 2L);
@@ -283,9 +286,8 @@ class ChallengeProgressServiceTest {
                 .thenReturn(new PageImpl<>(List.of(p)));
         when(challengeRepository.findAllById(any())).thenReturn(List.of(deleted));
 
-        MyParticipationResponse res = service.myParticipations(2L, PageRequest.of(0, 10))
-                .getContent()
-                .get(0);
+        MyParticipationResponse res =
+                service.myParticipations(2L, PageRequest.of(0, 10)).getContent().get(0);
 
         assertThat(res.challenge().title()).isEqualTo("신약 60일");
         assertThat(res.completed()).isTrue(); // rounds >= 1

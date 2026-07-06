@@ -83,8 +83,7 @@ class BibleChallengeApiTest {
     }
 
     private String userToken() {
-        return "Bearer "
-                + provider.issueAccess(new MemberPrincipal(memberId, "uuid-user", "미승인", 0), null, List.of());
+        return "Bearer " + provider.issueAccess(new MemberPrincipal(memberId, "uuid-user", "미승인", 0), null, List.of());
     }
 
     /** 신약 60일 챌린지(오늘 10일차) 생성 → id. dailyGoal = ceil(260/60) = 5. */
@@ -275,7 +274,8 @@ class BibleChallengeApiTest {
         mockMvc.perform(post("/api/bible-challenges/" + id + "/read")
                         .header("Authorization", memberToken())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"chapters\":5,\"date\":\"%s\"}".formatted(LocalDate.now().minusDays(1))))
+                        .content("{\"chapters\":5,\"date\":\"%s\"}"
+                                .formatted(LocalDate.now().minusDays(1))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.streakDays").value(2))
                 .andExpect(jsonPath("$.chaptersRead").value(10));
@@ -289,7 +289,8 @@ class BibleChallengeApiTest {
         mockMvc.perform(post("/api/bible-challenges/" + id + "/read")
                         .header("Authorization", memberToken())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"chapters\":5,\"date\":\"%s\"}".formatted(LocalDate.now().plusDays(1))))
+                        .content("{\"chapters\":5,\"date\":\"%s\"}"
+                                .formatted(LocalDate.now().plusDays(1))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
     }

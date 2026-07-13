@@ -122,6 +122,7 @@ TAG_MANAGE       태그 추가/수정/삭제
 GALLERY_WRITE    갤러리 업로드/수정/삭제
 GALLERY_VIEW     갤러리 조회 (회원 전용 열람)
 BULLETIN_WRITE   주보 업로드/수정/삭제
+INQUIRY_MANAGE   문의 조회/완료체크/삭제
 ```
 
 roles (초기):
@@ -614,6 +615,38 @@ SELECT 'bulletin', id, title FROM bulletins WHERE media_id = 42 AND deleted_at I
 
 ---
 
+### 5.14 문의 (Inquiry)
+
+홈페이지 방문자가 교회에 문의를 남기는 창구. **답변은 담당자가 이메일/문자로 직접 발송**하므로 서버는 답변을 저장하지 않고 **처리 여부만 추적**한다(스펙 §2 No-SMTP 원칙 유지). 문의에는 이름·연락처가 담기므로 **조회부터 권한이 필요**하다(공개 읽기 아님).
+
+| 메서드 | 경로 | 권한 | 설명 |
+|---|---|---|---|
+| POST | /api/inquiries | 공개 | 문의 등록 (비로그인). 접수 번호(id)만 반환 |
+| GET | /api/admin/inquiries | INQUIRY_MANAGE | 목록 (최신순, 페이징, `?completed=true|false` 필터) |
+| GET | /api/admin/inquiries/{id} | INQUIRY_MANAGE | 단건 (문의 내용 포함) |
+| PATCH | /api/admin/inquiries/{id}/complete | INQUIRY_MANAGE | 완료 체크 / 완료 취소 토글 |
+| DELETE | /api/admin/inquiries/{id} | INQUIRY_MANAGE | 삭제 (soft delete) |
+
+**inquiries 테이블**
+| 컬럼 | 타입 | 비고 |
+|---|---|---|
+| id | BIGINT PK | 접수 번호 |
+| name | VARCHAR(50) | 필수 |
+| phone | VARCHAR(20) | 필수. `members.phone` 관례대로 digits-only 정규화 저장 |
+| email | VARCHAR(100) | 선택 |
+| content | TEXT | 필수, 최소 10자. 일반 텍스트(마크다운 아님 → `media:{id}` 참조 없음) |
+| privacy_agreed_at | TIMESTAMP | 개인정보 수집·이용 동의 시각. 동의(`privacyAgreed=true`) 없으면 400 |
+| completed_at | TIMESTAMP | NULL=미처리, 값=완료. 완료 취소 시 다시 NULL |
+| created_by | BIGINT FK → members | 익명 제출이라 항상 NULL |
+| updated_by | BIGINT FK → members | 완료 처리한 관리자 |
+| created_at / updated_at / deleted_at / version | | BaseEntity |
+
+- 등록 API는 공개라 **IP당 시간당 5건** 레이트리밋을 둔다(Redis `inquiry:rl:{ip}` INCR + TTL 1h). 초과 시 `429 RATE_LIMIT_EXCEEDED`. CAPTCHA는 두지 않는다 — 스팸이 실제로 뚫리면 그때 올린다.
+- 문의 내용은 등록 후 수정하지 않는다. 관리자가 바꾸는 값은 완료 플래그뿐이고, 완료 토글은 멱등이라 요청에 `version`을 요구하지 않는다(JPA `@Version`은 백스톱으로 유지).
+- 답변 본문·상태 머신(대기/진행중/완료)·관리자 메모는 **의도적 비기능**. 필요해지면 컬럼을 하나씩 추가한다.
+
+---
+
 ## 6. 인덱스 전략
 
 soft delete를 전제로 하므로 **모든 목록 조회 인덱스는 `WHERE deleted_at IS NULL` 부분 인덱스**로 만든다(삭제된 행을 인덱스에서 제외해 크기·성능 최적화). 각 도메인의 기본 정렬·필터 기준에 맞춘 인덱스를 둔다.
@@ -635,6 +668,8 @@ soft delete를 전제로 하므로 **모든 목록 조회 인덱스는 `WHERE de
 | member_roles | `(member_id)`, `(role_id)` | 권한 조회·역할별 회원 조회 |
 | role_permissions | `(role_id)` | 역할의 권한 펼치기 |
 | media | `(mime_type, created_at DESC)` | 라이브러리 타입 필터·정렬 |
+| inquiries | `(created_at DESC) WHERE deleted_at IS NULL` | 문의 목록 |
+| inquiries | `(created_at DESC) WHERE deleted_at IS NULL AND completed_at IS NULL` | 미처리 문의 목록(관리자 기본 화면) |
 
 **미디어 참조 검색의 성능 한계 (중요):** 본문 참조 추적의 `LIKE '%media:{id}%'`는 **앞 와일드카드 때문에 B-tree 인덱스를 타지 못하고 풀스캔**한다. 교회 규모(도메인별 글 수백 개)에서는 5개 테이블 UNION 풀스캔도 체감 지연이 없어 수용한다. 글이 수만 건으로 늘면 본문 컬럼에 **`pg_trgm` GIN 인덱스**를 추가해 LIKE를 가속한다(스키마·코드 변경 없이 인덱스만 추가). 갤러리·주보의 `media_id` FK 검색은 일반 인덱스로 즉시 처리된다.
 

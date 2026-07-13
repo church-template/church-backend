@@ -25,6 +25,7 @@ Canonical mappings (reuse these codes — don't invent new ones ad hoc):
 | 409 | `MEDIA_IN_USE` | media delete blocked (include `references`) |
 | 409 | `OPTIMISTIC_LOCK_CONFLICT` | concurrent edit |
 | 409 | `DUPLICATE_RESOURCE` | duplicate phone, etc. |
+| 429 | `RATE_LIMIT_EXCEEDED` | public-endpoint abuse guard (inquiry submit: 5/hour per IP) |
 
 ## List responses — always paginated
 

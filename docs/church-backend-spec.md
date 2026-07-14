@@ -622,12 +622,13 @@ SELECT 'bulletin', id, title FROM bulletins WHERE media_id = 42 AND deleted_at I
 | 메서드 | 경로 | 권한 | 설명 |
 |---|---|---|---|
 | POST | /api/inquiries | 공개 | 문의 등록 (비로그인). 접수 번호(id)만 반환 |
-| GET | /api/admin/inquiries | INQUIRY_MANAGE | 목록 (최신순, 페이징, `?completed=true|false` 필터) |
+| GET | /api/admin/inquiries | INQUIRY_MANAGE | 목록 (최신순, 페이징, `?completed=true\|false` 필터) |
 | GET | /api/admin/inquiries/{id} | INQUIRY_MANAGE | 단건 (문의 내용 포함) |
 | PATCH | /api/admin/inquiries/{id}/complete | INQUIRY_MANAGE | 완료 체크 / 완료 취소 토글 |
 | DELETE | /api/admin/inquiries/{id} | INQUIRY_MANAGE | 삭제 (soft delete) |
 
 **inquiries 테이블**
+
 | 컬럼 | 타입 | 비고 |
 |---|---|---|
 | id | BIGINT PK | 접수 번호 |

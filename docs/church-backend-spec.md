@@ -628,7 +628,6 @@ SELECT 'bulletin', id, title FROM bulletins WHERE media_id = 42 AND deleted_at I
 | DELETE | /api/admin/inquiries/{id} | INQUIRY_MANAGE | 삭제 (soft delete) |
 
 **inquiries 테이블**
-
 | 컬럼 | 타입 | 비고 |
 |---|---|---|
 | id | BIGINT PK | 접수 번호 |

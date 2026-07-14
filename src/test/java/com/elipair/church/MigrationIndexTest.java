@@ -121,6 +121,25 @@ class MigrationIndexTest {
     }
 
     @Test
+    void inquiries_created_at_is_partial_on_active_rows() {
+        assertThat(indexDef("idx_inquiries_created"))
+                .as("V14 문의 목록 인덱스")
+                .isNotNull()
+                .contains("created_at")
+                .contains("deleted_at IS NULL");
+    }
+
+    @Test
+    void inquiries_pending_is_partial_on_active_uncompleted_rows() {
+        assertThat(indexDef("idx_inquiries_pending"))
+                .as("V14 미처리 문의 전용 부분 인덱스")
+                .isNotNull()
+                .contains("created_at")
+                .contains("deleted_at IS NULL")
+                .contains("completed_at IS NULL");
+    }
+
+    @Test
     void challenge_participations_unique_is_partial_on_active_rows() {
         assertThat(indexDef("uq_challenge_participations_active"))
                 .as("V13 참여 부분 유니크(취소 후 재참여 허용)")

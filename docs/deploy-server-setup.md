@@ -83,6 +83,60 @@ curl -f http://localhost:8080/actuator/health       # {"status":"UP"}
 
 롤백: Actions → Deploy → Run workflow → `image_tag`에 이전 버전(예: `0.0.31`) 입력 후 실행.
 
-## 범위 외 (별도 이슈)
+## 7. HTTPS — Caddy 리버스 프록시
 
-- HTTPS 리버스 프록시(Caddy/Nginx) — 도입 시 OCI 인그레스는 80/443만 열고 8080은 닫는다.
+프론트가 별도 도메인(예: Vercel `https`)에서 API를 호출하면 백엔드도 **진짜 TLS**가 필요하다
+(자체서명/IP는 브라우저의 mixed-content·인증서 거부). Caddy가 도메인별 Let's Encrypt 인증서를
+자동 발급·갱신하며, 백엔드 재배포와 독립적으로(재부팅 시 자동) 뜬다.
+
+전제: 80/443이 클라우드 방화벽(§4)에서 열려 있을 것. docker-published 포트는 호스트 iptables
+INPUT을 우회하므로 보통 Security List만 열면 된다. **리버스 프록시 도입 후 8080은 외부에서 닫는다**
+(80/443만 개방) — 원(raw) 백엔드를 직접 노출하지 않기 위함.
+
+### 7-1. DNS
+
+도메인 관리처(가비아 등)에서 A레코드 추가: `api` → `<VM_IP>`.
+전파 확인: `dig @8.8.8.8 api.<교회도메인> +short` → VM IP가 나오면 완료.
+
+### 7-2. Caddy 기동
+
+```bash
+sudo mkdir -p /srv/caddy && sudo chown $USER:$USER /srv/caddy
+
+cat > /srv/caddy/Caddyfile <<'EOF'
+api.<교회도메인> {
+    reverse_proxy localhost:8080
+}
+EOF
+
+cat > /srv/caddy/docker-compose.yml <<'EOF'
+services:
+  caddy:
+    image: caddy:2-alpine
+    network_mode: host          # 호스트 80/443 사용 + localhost:8080 도달
+    restart: unless-stopped
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data         # 발급 인증서 영속화(재발급 rate-limit 방지)
+      - caddy-config:/config
+volumes:
+  caddy-data:
+  caddy-config:
+EOF
+
+cd /srv/caddy && docker compose up -d && docker compose logs --tail 25
+```
+
+로그에 `certificate obtained successfully`(또는 에러 없는 `serving initial configuration`)가 뜨면 성공.
+
+### 7-3. `.env`에 도메인 반영 + 백엔드 재기동
+
+```bash
+sed -i 's#^CORS_ALLOWED_ORIGIN=.*#CORS_ALLOWED_ORIGIN=https://<프론트도메인>#' /srv/church-backend/.env
+sed -i 's#^FILE_BASE_URL=.*#FILE_BASE_URL=https://api.<교회도메인>/api/media#' /srv/church-backend/.env
+
+cd /srv/church-backend
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate backend
+```
+
+확인: `curl -s https://api.<교회도메인>/actuator/health` → `{"status":"UP"}`, 브라우저에서 자물쇠(유효 인증서).

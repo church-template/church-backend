@@ -1,0 +1,27 @@
+{
+  "metadata": {
+    "lastUpdated": "2026-07-16T15:45:48Z",
+    "currentVersion": "0.0.35",
+    "projectType": "spring",
+    "totalReleases": 1
+  },
+  "releases": [
+    {
+      "version": "0.0.35",
+      "project_type": "spring",
+      "date": "2026-07-16",
+      "pr_number": 52,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **기타**\n\n  * docs : 배포 가이드에 Caddy HTTPS 리버스 프록시 섹션 추가\n  * fix : 리버스 프록시 뒤 https 인식 위해 forward-headers-strategy 설정\n\n> 💡 더 정확한 릴리스 노트를 원한다면 Claude Code에서 `/github` 스킬로 PR 릴리스 노트를 업데이트할 수 있습니다.",
+      "parsed_changes": {
+        "기타": {
+          "title": "기타",
+          "items": [
+            "docs : 배포 가이드에 Caddy HTTPS 리버스 프록시 섹션 추가",
+            "fix : 리버스 프록시 뒤 https 인식 위해 forward-headers-strategy 설정"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    }
+  ]
+}

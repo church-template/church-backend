@@ -27,6 +27,11 @@ spring:
       max-file-size: ${FILE_MAX_SIZE:10485760}
       max-request-size: ${FILE_MAX_SIZE:10485760}
 
+server:
+  # 리버스 프록시(Caddy/nginx) 뒤 배포 전제 — X-Forwarded-* 신뢰해 https/host를 올바르게 인식.
+  # springdoc servers URL·리다이렉트 등 절대 URL이 https로 생성된다. 8080 직접 노출 금지가 전제.
+  forward-headers-strategy: framework
+
 springdoc:
   api-docs:
     enabled: ${SWAGGER_ENABLED:true}

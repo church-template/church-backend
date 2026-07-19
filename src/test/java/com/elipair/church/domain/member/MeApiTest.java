@@ -69,8 +69,9 @@ class MeApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("홍길동"))
                 .andExpect(jsonPath("$.roles[0]").value("MEMBER"))
-                // V13 이후 MEMBER = GALLERY_VIEW + CHALLENGE_PARTICIPATE, 순서는 계약이 아니라 전체 집합으로 단언
-                .andExpect(jsonPath("$.permissions", containsInAnyOrder("GALLERY_VIEW", "CHALLENGE_PARTICIPATE")))
+                // V15 이후 MEMBER = GALLERY_VIEW + CHALLENGE_PARTICIPATE + SERMON_VIEW, 순서는 계약이 아니라 전체 집합으로 단언
+                .andExpect(jsonPath(
+                        "$.permissions", containsInAnyOrder("GALLERY_VIEW", "CHALLENGE_PARTICIPATE", "SERMON_VIEW")))
                 .andExpect(jsonPath("$.approved").value(true)) // GALLERY_VIEW 보유 = 승인
                 .andExpect(jsonPath("$.termsAgreed").value(true));
     }

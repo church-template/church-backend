@@ -193,6 +193,23 @@ class SermonApiTest {
                 .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
     }
 
+    // /api/main(공개)에 노출된 설교 카드를 클릭한 상세 조회(/api/sermons/{id})도 회원전용이어야 한다.
+    @Test
+    void detail_anonymous_is_401() throws Exception {
+        long id = createSermon();
+        mockMvc.perform(get("/api/sermons/" + id))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_TOKEN"));
+    }
+
+    @Test
+    void detail_without_sermon_view_is_403() throws Exception {
+        long id = createSermon();
+        mockMvc.perform(get("/api/sermons/" + id).header("Authorization", token(authorId, "MEDIA_MANAGE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
     @Test
     void put_full_update_changes_fields_and_bumps_version() throws Exception {
         long id = createSermon();

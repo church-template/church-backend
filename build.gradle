@@ -7,7 +7,7 @@ plugins {
 }
 
 group = 'com.elipair'
-version = '0.0.35'
+version = '0.0.36'
 description = 'church-backend'
 
 java {

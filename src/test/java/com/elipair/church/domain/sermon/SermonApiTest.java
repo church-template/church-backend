@@ -68,6 +68,10 @@ class SermonApiTest {
         return token(authorId, "SERMON_WRITE");
     }
 
+    private String viewerToken() {
+        return token(authorId, "SERMON_VIEW");
+    }
+
     private static final String CREATE_BODY = """
             {"title":"산상수훈 강해 1","preacher":"김목사","series":"산상수훈","scripture":"마 5:1-12",
              "content":"본문 ![](media:42)","videoUrl":"https://youtu.be/abc","audioUrl":null,
@@ -132,11 +136,11 @@ class SermonApiTest {
     }
 
     @Test
-    void public_list_paginates_and_omits_content() throws Exception {
+    void members_list_paginates_and_omits_content() throws Exception {
         createSermon();
         createSermon();
 
-        mockMvc.perform(get("/api/sermons"))
+        mockMvc.perform(get("/api/sermons").header("Authorization", viewerToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.page.totalElements").value(2))
@@ -146,33 +150,47 @@ class SermonApiTest {
     }
 
     @Test
-    void public_list_filters_by_preacher() throws Exception {
+    void members_list_filters_by_preacher() throws Exception {
         createSermon(); // 김목사
-        mockMvc.perform(get("/api/sermons").param("preacher", "김목사"))
+        mockMvc.perform(get("/api/sermons").param("preacher", "김목사").header("Authorization", viewerToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements").value(1));
-        mockMvc.perform(get("/api/sermons").param("preacher", "없는목사"))
+        mockMvc.perform(get("/api/sermons").param("preacher", "없는목사").header("Authorization", viewerToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements").value(0));
     }
 
     @Test
-    void public_detail_increments_view_count() throws Exception {
+    void members_detail_increments_view_count() throws Exception {
         long id = createSermon();
 
-        mockMvc.perform(get("/api/sermons/" + id))
+        mockMvc.perform(get("/api/sermons/" + id).header("Authorization", viewerToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.viewCount").value(1));
-        mockMvc.perform(get("/api/sermons/" + id))
+        mockMvc.perform(get("/api/sermons/" + id).header("Authorization", viewerToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.viewCount").value(2));
     }
 
     @Test
     void detail_unknown_is_404() throws Exception {
-        mockMvc.perform(get("/api/sermons/999999"))
+        mockMvc.perform(get("/api/sermons/999999").header("Authorization", viewerToken()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    void list_anonymous_is_401() throws Exception {
+        mockMvc.perform(get("/api/sermons"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_TOKEN"));
+    }
+
+    @Test
+    void list_without_sermon_view_is_403() throws Exception {
+        mockMvc.perform(get("/api/sermons").header("Authorization", token(authorId, "MEDIA_MANAGE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
     }
 
     @Test
@@ -261,7 +279,8 @@ class SermonApiTest {
 
         mockMvc.perform(delete("/api/admin/sermons/" + id).header("Authorization", adminToken()))
                 .andExpect(status().isNoContent());
-        mockMvc.perform(get("/api/sermons/" + id)).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/sermons/" + id).header("Authorization", viewerToken()))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -271,7 +290,7 @@ class SermonApiTest {
         author.softDelete();
         memberRepository.saveAndFlush(author);
 
-        mockMvc.perform(get("/api/sermons/" + id))
+        mockMvc.perform(get("/api/sermons/" + id).header("Authorization", viewerToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.author").value("(탈퇴한 사용자)"));
     }

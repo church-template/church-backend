@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A **reusable template backend** for church homepage sites. The code stays single-church and clean; every church-specific value (name, domain, JWT secret, DB credentials, CORS origin) is injected via `.env`. Deploying a new church = copy code → swap `.env` → deploy. There is intentionally **no multi-tenancy** — no `church_id`/`tenant_id` columns; each church gets a separate DB and a separate deployment instance, so isolation is an infrastructure concern, not a code concern.
 
-The repo is currently an **early scaffold**: only `ChurchBackendApplication` and a context-load test exist. The full intended design lives in **`docs/church-backend-spec.md`** (Korean) — treat it as the authoritative blueprint when implementing any domain. Read the relevant spec section before building a feature; don't infer the data model from the (mostly empty) source tree.
+The domains are largely implemented (15 packages under `domain/`). The full intended design lives in **`docs/church-backend-spec.md`** (Korean) — treat it as the authoritative blueprint. Read the relevant spec section before building or changing a feature.
 
 Working language is **Korean**: commits, the spec, issue templates, and CodeRabbit reviews (`ko-KR`) are all in Korean.
 
@@ -46,7 +46,7 @@ The stack is **Spring Boot 4.0.6** on Java 21. SB4 differs from the more common 
 
 - The web starter is **`spring-boot-starter-webmvc`** (renamed from `spring-boot-starter-web` in SB4).
 - Test dependencies use module-specific `*-test` starters (e.g. `spring-boot-starter-data-jpa-test`, `spring-boot-starter-webmvc-test`), not a single `spring-boot-starter-test`.
-- Several things the spec calls for are **not yet wired up**: springdoc-openapi (Swagger), the Docker/`docker-compose` setup, an `application.yml` reading `${ENV}` vars, and any `.env`/`.env.example`. Add them with SB4-compatible coordinates and confirm against current docs (use Context7 for Spring Boot docs).
+- springdoc-openapi (Swagger UI `/docs/swagger-ui.html`), Docker/`docker-compose`, the `${ENV}`-reading `application.yml`, and `.env.example` are all wired up. When adding any **new** dependency, verify the SB4-compatible coordinate against current docs (use Context7 for Spring Boot docs).
 
 ## Architecture (the parts that span files)
 

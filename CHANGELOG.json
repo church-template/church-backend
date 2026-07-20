@@ -1,11 +1,34 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-16T15:45:48Z",
-    "currentVersion": "0.0.35",
+    "lastUpdated": "2026-07-20T01:02:20Z",
+    "currentVersion": "0.0.38",
     "projectType": "spring",
-    "totalReleases": 1
+    "totalReleases": 2
   },
   "releases": [
+    {
+      "version": "0.0.38",
+      "project_type": "spring",
+      "date": "2026-07-20",
+      "pr_number": 55,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **기타**\n\n  * Merge branch 'main' of https://github.com/church-template/church-backend\n  * docs : AI 온보딩 문서 체계 설계 스펙 (AGENTS.md·README·setup 문서 + 기존 문서 동기화)\n  * chore : 필요 파일 생성\n  * Merge pull request #54 from church-template/20260719_#53_설교_회원전용_전환\n  * docs : 설교 회원전용 전환 스펙·플랜(+/api/main 공개 유지 결정 명시) #53\n  * test : /api/main 클릭스루 상세(/api/sermons/{id}) 회원전용 차단 검증 추가 #53\n  * feat : 설교 조회를 SERMON_VIEW 회원전용으로 게이트 #53\n  * feat : 설교 회원전용용 SERMON_VIEW 권한 신설·시드 #53\n\n> 💡 더 정확한 릴리스 노트를 원한다면 Claude Code에서 `/github` 스킬로 PR 릴리스 노트를 업데이트할 수 있습니다.",
+      "parsed_changes": {
+        "기타": {
+          "title": "기타",
+          "items": [
+            "Merge branch 'main' of https://github.com/church-template/church-backend",
+            "docs : AI 온보딩 문서 체계 설계 스펙 (AGENTS.md·README·setup 문서 + 기존 문서 동기화)",
+            "chore : 필요 파일 생성",
+            "Merge pull request #54 from church-template/20260719_#53_설교_회원전용_전환",
+            "docs : 설교 회원전용 전환 스펙·플랜(+/api/main 공개 유지 결정 명시) #53",
+            "test : /api/main 클릭스루 상세(/api/sermons/{id}) 회원전용 차단 검증 추가 #53",
+            "feat : 설교 조회를 SERMON_VIEW 회원전용으로 게이트 #53",
+            "feat : 설교 회원전용용 SERMON_VIEW 권한 신설·시드 #53"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "0.0.35",
       "project_type": "spring",

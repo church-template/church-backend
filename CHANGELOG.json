@@ -1,11 +1,33 @@
 {
   "metadata": {
-    "lastUpdated": "2026-07-20T07:23:36Z",
-    "currentVersion": "0.0.40",
+    "lastUpdated": "2026-07-20T09:17:03Z",
+    "currentVersion": "0.0.41",
     "projectType": "spring",
-    "totalReleases": 3
+    "totalReleases": 4
   },
   "releases": [
+    {
+      "version": "0.0.41",
+      "project_type": "spring",
+      "date": "2026-07-20",
+      "pr_number": 61,
+      "raw_summary": "## Summary by CodeRabbit\n\n- **새 기능**\n  - 운영 환경에서 PostgreSQL 서비스를 추가로 사용할 수 있습니다.\n  - 데이터베이스 포트는 로컬 호스트에만 연결되어 외부에 직접 노출되지 않습니다.\n\n- **문서**\n  - README에 표시되는 제품 버전과 업데이트 날짜가 최신 정보로 갱신되었습니다.\n\n- **릴리스**\n  - 제품 버전이 `0.0.41`로 업데이트되었습니다.\n  - 버전 코드와 관련 메타데이터가 새 릴리스에 맞게 동기화되었습니다.",
+      "parsed_changes": {
+        "새_기능": {
+          "title": "새 기능",
+          "items": [
+            "운영 환경에서 PostgreSQL 서비스를 추가로 사용할 수 있습니다.",
+            "데이터베이스 포트는 로컬 호스트에만 연결되어 외부에 직접 노출되지 않습니다.",
+            "**문서**",
+            "README에 표시되는 제품 버전과 업데이트 날짜가 최신 정보로 갱신되었습니다.",
+            "**릴리스**",
+            "제품 버전이 `0.0.41`로 업데이트되었습니다.",
+            "버전 코드와 관련 메타데이터가 새 릴리스에 맞게 동기화되었습니다."
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "0.0.40",
       "project_type": "spring",

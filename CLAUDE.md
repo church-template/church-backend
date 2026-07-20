@@ -37,6 +37,9 @@ Gradle wrapper, Java 21 toolchain.
 ./gradlew test --tests 'com.elipair.church.SomeTest.someMethod'
 ```
 
+로컬 셋업 절차·목데이터·함정 목록은 `docs/setup-dev.md`, 새 교회 배포는 `docs/setup-new-church.md`가 정본.
+비-Claude 에이전트용 진입점으로 `AGENTS.md`가 있다(이 파일과 사실이 어긋나면 안 됨).
+
 ### Spring Boot 4 notes (important)
 
 The stack is **Spring Boot 4.0.6** on Java 21. SB4 differs from the more common SB3 in ways that bite when adding dependencies:

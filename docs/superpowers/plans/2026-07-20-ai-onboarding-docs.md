@@ -18,7 +18,7 @@
 
 ---
 
-### Task 1: docker-compose.override.yml 추적 해제
+### Task 1: docker-compose.override.yml 추적 해제 — **[집행 시 정정: no-op]** 실행 시 재검증 결과 처음부터 미추적(스펙 §6 정정 참조). Step 1 검증만 수행하고(Expected를 "무출력"으로 정정) Step 2~4는 건너뛴다.
 
 **Files:**
 - Modify: (git index만) `docker-compose.override.yml` — 파일 내용·로컬 사본은 그대로 둠
@@ -29,7 +29,7 @@
 - [ ] **Step 1: 현재 추적 상태 확인**
 
 Run: `git ls-files docker-compose.override.yml`
-Expected: `docker-compose.override.yml` 출력(추적 중)
+Expected: 무출력(원래부터 미추적 — 상단 [집행 시 정정] 참조. 초안은 "출력(추적 중)"을 기대했으나 오독이었음)
 
 - [ ] **Step 2: 추적 해제 (로컬 파일 유지)**
 

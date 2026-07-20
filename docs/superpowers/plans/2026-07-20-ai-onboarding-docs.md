@@ -29,7 +29,7 @@
 - [ ] **Step 1: 현재 추적 상태 확인**
 
 Run: `git ls-files docker-compose.override.yml`
-Expected: `docker-compose.override.yml` 출력(추적 중)
+Expected: 무출력(원래부터 미추적 — 상단 [집행 시 정정] 참조. 초안은 "출력(추적 중)"을 기대했으나 오독이었음)
 
 - [ ] **Step 2: 추적 해제 (로컬 파일 유지)**
 

@@ -33,15 +33,22 @@ Additional hard stops:
 - Carry **flattened `permissions`** + `maxPriority` — not roles.
 - Token reflects issue-time values; role/permission changes apply on next refresh. For live authority decisions on sensitive screens, read DB (`GET /api/members/me`), not the token.
 
-## Path authorization is three-way (not "reads are public")
+## Path authorization — SecurityConfig 매처 체인이 정본
 
-| Path | Rule |
-|---|---|
-| `/api/admin/**` | requires the matching write/manage permission (e.g. `SERMON_WRITE`) |
-| `/api/gallery/**` | login **+ `GALLERY_VIEW`** (members-only; not public) |
-| other `/api/**` reads | public |
+매처는 **선언 순서대로 선순위 매칭**된다 (`global/config/SecurityConfig.securityFilterChain`):
 
-`MEMBER` role = approved 교인 (holds `GALLERY_VIEW`); plain `USER` (auto-granted at signup) and anonymous visitors are blocked from gallery. Granting `MEMBER` **is** the 교인 approval step (replaces email verification).
+| 순서 | Path | Rule |
+|---|---|---|
+| 1 | swagger(`/v3/api-docs`, `/v3/api-docs/**`, `/docs/swagger-ui/**`, `/docs/swagger-ui.html`) · `/error` · `/actuator/health` | permitAll |
+| 2 | `/api/admin/**` | 인증 필수 + 세부 권한은 메서드 `@PreAuthorize` (예: `SERMON_WRITE`) |
+| 3 | `/api/gallery/**` | `GALLERY_VIEW` (승인 교인 전용) |
+| 4 | `/api/bible-challenges/**` | `CHALLENGE_PARTICIPATE` (승인 교인 전용) |
+| 5 | `/api/sermons/**` | `SERMON_VIEW` (승인 교인 전용 — 2026-07 #53 전환) |
+| 6 | 나머지 `/api/**` (공지·행사·주보·부서·문의·메인 등) | public |
+
+- `/api/main`(통합 조회)은 **의도적으로 public 유지** — 설교 카드가 홈에 노출돼도 상세(`/api/sermons/{id}`) 클릭은 차단된다(#53 설계 결정).
+- `MEMBER` role = 승인 교인 — `GALLERY_VIEW`·`SERMON_VIEW`·`CHALLENGE_PARTICIPATE` 보유(V2·V13·V15 시드). 가입 직후 기본 `USER`와 익명은 회원전용 경로에서 차단. `MEMBER` 부여가 곧 교인 승인 절차다(이메일 인증 대체).
+- 새 회원전용 경로를 추가할 땐 `anyRequest().permitAll()` **앞에** 매처를 넣고, 이 표와 CLAUDE.md 요약도 함께 갱신할 것.
 
 ## Identifier language
 

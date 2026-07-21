@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -121,8 +122,13 @@ public class VehicleRunService {
         if (requestRepository.existsByRunIdAndMemberIdAndDeletedAtIsNull(runId, memberId)) {
             throw new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "이미 신청한 운행일입니다");
         }
-        return VehicleRequestResponse.from(
-                requestRepository.save(VehicleRequest.create(runId, memberId, req.pickupLocation(), req.note())));
+        try {
+            return VehicleRequestResponse.from(
+                    requestRepository.save(VehicleRequest.create(runId, memberId, req.pickupLocation(), req.note())));
+        } catch (DataIntegrityViolationException e) {
+            // 동시 중복 신청 레이스: exists 선검사를 동시에 통과해도 uq_vehicle_requests_active가 백스톱 — 500 대신 409
+            throw new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "이미 신청한 운행일입니다");
+        }
     }
 
     /** 본인 신청 취소(소유권 암묵 — 본인 것만 찾아 지운다). 삭제된 운행일이어도 취소는 허용. */

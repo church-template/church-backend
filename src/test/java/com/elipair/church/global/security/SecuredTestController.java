@@ -29,6 +29,11 @@ public class SecuredTestController {
         return "challenge";
     }
 
+    @GetMapping("/api/vehicle-runs/ping")
+    public String vehiclePing() {
+        return "vehicle";
+    }
+
     @GetMapping("/api/me/ping")
     @PreAuthorize("isAuthenticated()")
     public String mePing() {

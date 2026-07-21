@@ -95,6 +95,26 @@ class SecurityConfigPathRulesTest {
     }
 
     @Test
+    void vehicle_path_without_vehicle_apply_is_403() throws Exception {
+        mockMvc.perform(get("/api/vehicle-runs/ping").header("Authorization", bearer(List.of("SERMON_WRITE"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void vehicle_path_with_vehicle_apply_is_200() throws Exception {
+        mockMvc.perform(get("/api/vehicle-runs/ping").header("Authorization", bearer(List.of("VEHICLE_APPLY"))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void vehicle_path_anonymous_is_401_invalid_token() throws Exception {
+        mockMvc.perform(get("/api/vehicle-runs/ping"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_TOKEN"));
+    }
+
+    @Test
     void me_path_anonymous_is_401() throws Exception {
         mockMvc.perform(get("/api/me/ping")).andExpect(status().isUnauthorized());
     }

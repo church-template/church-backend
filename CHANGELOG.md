@@ -1,7 +1,25 @@
 # Changelog
 
-**현재 버전:** 0.0.41  
-**마지막 업데이트:** 2026-07-20T09:17:03Z  
+**현재 버전:** 0.0.42  
+**마지막 업데이트:** 2026-07-21T13:39:57Z  
+
+---
+
+## [0.0.42] - 2026-07-21
+
+**PR:** #64  
+
+**기타**
+- Merge pull request #63 from church-template/20260721_#62_차량운행_신청_API
+- docs : 차량운행 경로 인가·도메인 문서 동기화 #62
+- fix : 동시 중복 신청 레이스를 409 DUPLICATE_RESOURCE로 매핑 #62
+- feat : 운행일별 통합 명단 조회 API #62
+- feat : 차량운행 조회·탑승 신청·취소 API #62
+- test : MeApiTest MEMBER 권한 목록에 VEHICLE_APPLY 반영 #62
+- feat : 운행일 관리 CRUD API #62
+- feat : /api/vehicle-runs 경로 인가(VEHICLE_APPLY) 추가 #62
+- feat : 차량운행 테이블·권한 시드 마이그레이션(V16) #62
+- docs : 차량운행 신청 설계·구현 계획 #62
 
 ---
 

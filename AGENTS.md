@@ -21,8 +21,8 @@
 - **RBAC**: 직분(position)과 권한은 독립 축. 인가는 항상 권한 단위
   `@PreAuthorize("hasAuthority('SERMON_WRITE')")` — role·직분으로 검사 금지. 역할 priority 계층 가드
   (부여는 strictly-below, 역할 수정은 at-or-below). → `rbac-authorization.md`
-- **경로 인가**: `/api/admin/**` 인증+메서드 권한 · `/api/gallery/**`·`/api/bible-challenges/**`·`/api/sermons/**`
-  회원전용(각 `GALLERY_VIEW`/`CHALLENGE_PARTICIPATE`/`SERMON_VIEW`) · 나머지 public(`/api/main` 포함, 의도적).
+- **경로 인가**: `/api/admin/**` 인증+메서드 권한 · `/api/gallery/**`·`/api/bible-challenges/**`·`/api/sermons/**`·`/api/vehicle-runs/**`
+  회원전용(각 `GALLERY_VIEW`/`CHALLENGE_PARTICIPATE`/`SERMON_VIEW`/`VEHICLE_APPLY`) · 나머지 public(`/api/main` 포함, 의도적).
   정본: `SecurityConfig` 매처 체인. → `rbac-authorization.md`
 - **JWT**: `sub`=member uuid(BIGINT id 금지), payload는 평탄화된 permissions+maxPriority. → `rbac-authorization.md`
 - **영속성**: soft delete(`deleted_at`) 전면 + 모든 목록 인덱스는 partial(`WHERE deleted_at IS NULL`),

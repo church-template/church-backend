@@ -53,7 +53,7 @@ The stack is **Spring Boot 4.0.6** on Java 21. SB4 differs from the more common 
 Package-by-feature under `com.elipair.church` (per spec §7):
 
 - `global/` — cross-cutting: `config/` (Security, Redis, Swagger, Jpa), `security/` (JWT issue/verify filter, authorization, **priority-based hierarchy checks**), `exception/` (RFC 7807 global handler), `common/` (`BaseEntity`, page wrapper), `storage/` (`FileStorage` interface + `LocalFileStorage`), `viewcount/` (조회수 버퍼 → 주기 flush).
-- `domain/` — `auth`, `member`, `role`, `position`, `sermon`, `notice`, `event`, `department`, `tag`, `media`, `gallery`, `bulletin`, `challenge`(통독), `inquiry`(문의), `main`(통합 조회). Each splits into `controller/service/repository/entity/dto`; keep simple domains flat rather than over-nesting. Dependency direction is **domain → global, one-way**.
+- `domain/` — `auth`, `member`, `role`, `position`, `sermon`, `notice`, `event`, `department`, `tag`, `media`, `gallery`, `bulletin`, `challenge`(통독), `inquiry`(문의), `vehicle`(차량운행), `main`(통합 조회). Each splits into `controller/service/repository/entity/dto`; keep simple domains flat rather than over-nesting. Dependency direction is **domain → global, one-way**.
 
 Cross-cutting conventions that every domain must follow consistently — get these right once in `global` and inherit:
 
@@ -65,7 +65,7 @@ Cross-cutting conventions that every domain must follow consistently — get the
 - **Author display = `updated_by`** (last editor), not the original author — so a withdrawn author's posts self-heal when edited; show "(탈퇴한 사용자)" when that member is soft-deleted.
 - **Central media library**: images/PDFs all live in one `media` table. Bodies reference them as the literal string `media:{id}` inside markdown (not URLs), so bodies stay domain-independent across churches. Reference tracking is body `LIKE '%media:{id}%'` UNION gallery/bulletin FK; deletion is **blocking** (409 + reference list if in use). Markdown is stored raw (TEXT); rendering/sanitizing is the frontend's job.
 - **Identifier naming**: code-facing keys are **English** (permission names like `SERMON_WRITE`, role names like `ADMIN`); user-facing data is **Korean** (position/tag names, titles, `roles.description`).
-- **Path authorization**: `/api/admin/**` 인증+메서드 권한, `/api/gallery/**` `GALLERY_VIEW`, `/api/bible-challenges/**` `CHALLENGE_PARTICIPATE`, `/api/sermons/**` `SERMON_VIEW`(회원전용), 나머지 `/api/**` public(`/api/main` 포함 — 의도적). 정본은 `SecurityConfig` 매처 체인과 `.claude/rules/rbac-authorization.md`의 표.
+- **Path authorization**: `/api/admin/**` 인증+메서드 권한, `/api/gallery/**` `GALLERY_VIEW`, `/api/bible-challenges/**` `CHALLENGE_PARTICIPATE`, `/api/sermons/**` `SERMON_VIEW`(회원전용), `/api/vehicle-runs/**` `VEHICLE_APPLY`(회원전용), 나머지 `/api/**` public(`/api/main` 포함 — 의도적). 정본은 `SecurityConfig` 매처 체인과 `.claude/rules/rbac-authorization.md`의 표.
 
 ## Versioning & CI — do not hand-edit (SUH-DEVOPS-TEMPLATE)
 

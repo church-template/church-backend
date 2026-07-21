@@ -44,10 +44,11 @@ Additional hard stops:
 | 3 | `/api/gallery/**` | `GALLERY_VIEW` (승인 교인 전용) |
 | 4 | `/api/bible-challenges/**` | `CHALLENGE_PARTICIPATE` (승인 교인 전용) |
 | 5 | `/api/sermons/**` | `SERMON_VIEW` (승인 교인 전용 — 2026-07 #53 전환) |
-| 6 | 나머지 `/api/**` (공지·행사·주보·부서·문의·메인 등) | public |
+| 6 | `/api/vehicle-runs/**` | `VEHICLE_APPLY` (승인 교인 전용) |
+| 7 | 나머지 `/api/**` (공지·행사·주보·부서·문의·메인 등) | public |
 
 - `/api/main`(통합 조회)은 **의도적으로 public 유지** — 설교 카드가 홈에 노출돼도 상세(`/api/sermons/{id}`) 클릭은 차단된다(#53 설계 결정).
-- `MEMBER` role = 승인 교인 — `GALLERY_VIEW`·`SERMON_VIEW`·`CHALLENGE_PARTICIPATE` 보유(V2·V13·V15 시드). 가입 직후 기본 `USER`와 익명은 회원전용 경로에서 차단. `MEMBER` 부여가 곧 교인 승인 절차다(이메일 인증 대체).
+- `MEMBER` role = 승인 교인 — `GALLERY_VIEW`·`SERMON_VIEW`·`CHALLENGE_PARTICIPATE`·`VEHICLE_APPLY` 보유(V2·V13·V15·V16 시드). 가입 직후 기본 `USER`와 익명은 회원전용 경로에서 차단. `MEMBER` 부여가 곧 교인 승인 절차다(이메일 인증 대체).
 - 새 회원전용 경로를 추가할 땐 `anyRequest().permitAll()` **앞에** 매처를 넣고, 이 표와 CLAUDE.md 요약도 함께 갱신할 것.
 
 ## Identifier language

@@ -26,7 +26,7 @@
 | 컬럼 | 타입 | 비고 |
 |---|---|---|
 | `id` | BIGSERIAL PK | |
-| `departs_at` | TIMESTAMPTZ NOT NULL | 운행 일시. 신청 마감 시각을 겸함 |
+| `departs_at` | TIMESTAMP NOT NULL | 운행 일시. 신청 마감 시각을 겸함 (저장소 관례: TIMESTAMP + 앱 Clock) |
 | `note` | TEXT NULL | 예: "토요일 오후, 학원 앞 경유" |
 
 ### `vehicle_requests` (신청)

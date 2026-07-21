@@ -327,4 +327,67 @@ class VehicleRunApiTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
     }
+
+    // ---- 관리자: 통합 명단 ----
+
+    @Test
+    void roster_returns_name_phone_pickup_in_apply_order() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"OO아파트 정문","note":"동생 1명 동승"}
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/admin/vehicle-runs/" + id + "/requests").header("Authorization", adminToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].name").value("김차량"))
+                .andExpect(jsonPath("$.content[0].phone").value("01011112222"))
+                .andExpect(jsonPath("$.content[0].pickupLocation").value("OO아파트 정문"))
+                .andExpect(jsonPath("$.content[0].note").value("동생 1명 동승"));
+    }
+
+    @Test
+    void roster_masks_withdrawn_member() throws Exception {
+        long id = createUpcomingRun();
+        Member withdrawn =
+                memberRepository.saveAndFlush(Member.create("01033334444", "박탈퇴", "{enc}", null, null, true, true));
+        String withdrawnToken = "Bearer "
+                + provider.issueAccess(
+                        new MemberPrincipal(withdrawn.getId(), "uuid-w", "박탈퇴", 100), null, List.of("VEHICLE_APPLY"));
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", withdrawnToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"XX빌라 앞"}
+                                """))
+                .andExpect(status().isCreated());
+
+        withdrawn.softDelete();
+        memberRepository.saveAndFlush(withdrawn);
+
+        mockMvc.perform(get("/api/admin/vehicle-runs/" + id + "/requests").header("Authorization", adminToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].name").value("(탈퇴한 사용자)"));
+    }
+
+    @Test
+    void roster_without_manage_is_403() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(get("/api/admin/vehicle-runs/" + id + "/requests").header("Authorization", memberToken()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void roster_of_deleted_run_is_404() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(delete("/api/admin/vehicle-runs/" + id).header("Authorization", adminToken()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/admin/vehicle-runs/" + id + "/requests").header("Authorization", adminToken()))
+                .andExpect(status().isNotFound());
+    }
 }

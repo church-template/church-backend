@@ -1,5 +1,6 @@
 package com.elipair.church.domain.vehicle;
 
+import com.elipair.church.domain.vehicle.dto.VehicleRosterEntryResponse;
 import com.elipair.church.domain.vehicle.dto.VehicleRunCreateRequest;
 import com.elipair.church.domain.vehicle.dto.VehicleRunDetailResponse;
 import com.elipair.church.domain.vehicle.dto.VehicleRunPatchRequest;
@@ -85,5 +86,20 @@ public class AdminVehicleRunController {
     public Page<VehicleRunDetailResponse> list(
             @PageableDefault(size = 10, sort = "departsAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return service.adminList(pageable);
+    }
+
+    @Operation(summary = "운행일별 통합 명단", description = """
+                    운행일 한 건의 탑승 신청 명단을 조회한다(중등·고등·청년 통합, 신청순).
+
+                    - 인증(JWT): 필요 — `VEHICLE_MANAGE` (연락처=개인정보라 조회부터 권한 필요)
+                    - 경로 변수: `id` — 운행일 ID
+                    - 요청 파라미터: `page`·`size` — 페이지네이션(기본 `createdAt,asc`)
+                    - 반환값: `Page<VehicleRosterEntryResponse>` — 이름(탈퇴 시 "(탈퇴한 사용자)")·연락처·픽업 장소·메모·신청 시각
+                    """)
+    @GetMapping("/api/admin/vehicle-runs/{id}/requests")
+    public Page<VehicleRosterEntryResponse> roster(
+            @PathVariable Long id,
+            @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable) {
+        return service.roster(id, pageable);
     }
 }

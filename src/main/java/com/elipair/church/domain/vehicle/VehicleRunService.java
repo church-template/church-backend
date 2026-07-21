@@ -1,8 +1,12 @@
 package com.elipair.church.domain.vehicle;
 
+import com.elipair.church.domain.member.AuthorDisplayService;
+import com.elipair.church.domain.member.Member;
+import com.elipair.church.domain.member.MemberRepository;
 import com.elipair.church.domain.vehicle.dto.MyRequestResponse;
 import com.elipair.church.domain.vehicle.dto.VehicleRequestCreateRequest;
 import com.elipair.church.domain.vehicle.dto.VehicleRequestResponse;
+import com.elipair.church.domain.vehicle.dto.VehicleRosterEntryResponse;
 import com.elipair.church.domain.vehicle.dto.VehicleRunCardResponse;
 import com.elipair.church.domain.vehicle.dto.VehicleRunCreateRequest;
 import com.elipair.church.domain.vehicle.dto.VehicleRunDetailResponse;
@@ -30,12 +34,20 @@ public class VehicleRunService {
 
     private final VehicleRunRepository runRepository;
     private final VehicleRequestRepository requestRepository;
+    private final MemberRepository memberRepository;
+    private final AuthorDisplayService authorDisplayService;
     private final Clock clock;
 
     public VehicleRunService(
-            VehicleRunRepository runRepository, VehicleRequestRepository requestRepository, Clock clock) {
+            VehicleRunRepository runRepository,
+            VehicleRequestRepository requestRepository,
+            MemberRepository memberRepository,
+            AuthorDisplayService authorDisplayService,
+            Clock clock) {
         this.runRepository = runRepository;
         this.requestRepository = requestRepository;
+        this.memberRepository = memberRepository;
+        this.authorDisplayService = authorDisplayService;
         this.clock = clock;
     }
 
@@ -63,6 +75,23 @@ public class VehicleRunService {
 
     public Page<VehicleRunDetailResponse> adminList(Pageable pageable) {
         return runRepository.findByDeletedAtIsNull(pageable).map(VehicleRunDetailResponse::from);
+    }
+
+    /** 운행일별 통합 명단. 이름은 AuthorDisplayService(탈퇴 마스킹), 연락처는 members에서 일괄 조회(N+1 회피). */
+    public Page<VehicleRosterEntryResponse> roster(Long runId, Pageable pageable) {
+        load(runId);
+        Page<VehicleRequest> requests = requestRepository.findByRunIdAndDeletedAtIsNull(runId, pageable);
+        List<Long> memberIds =
+                requests.stream().map(VehicleRequest::getMemberId).distinct().toList();
+        Map<Long, String> names = authorDisplayService.displayNames(memberIds);
+        Map<Long, String> phones = memberRepository.findAllById(memberIds).stream()
+                .collect(Collectors.toMap(Member::getId, Member::getPhone));
+        return requests.map(request -> new VehicleRosterEntryResponse(
+                names.get(request.getMemberId()),
+                phones.get(request.getMemberId()),
+                request.getPickupLocation(),
+                request.getNote(),
+                request.getCreatedAt()));
     }
 
     // ---- 회원 ----

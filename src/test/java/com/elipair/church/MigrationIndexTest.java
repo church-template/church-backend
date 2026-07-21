@@ -148,4 +148,23 @@ class MigrationIndexTest {
                 .contains("member_id")
                 .contains("deleted_at IS NULL");
     }
+
+    @Test
+    void vehicle_runs_departs_at_is_partial_on_active_rows() {
+        assertThat(indexDef("idx_vehicle_runs_departs_at"))
+                .as("V16 운행일 목록 인덱스")
+                .isNotNull()
+                .contains("departs_at")
+                .contains("deleted_at IS NULL");
+    }
+
+    @Test
+    void vehicle_requests_unique_is_partial_on_active_rows() {
+        assertThat(indexDef("uq_vehicle_requests_active"))
+                .as("V16 신청 부분 유니크(취소 후 재신청 허용)")
+                .isNotNull()
+                .contains("run_id")
+                .contains("member_id")
+                .contains("deleted_at IS NULL");
+    }
 }

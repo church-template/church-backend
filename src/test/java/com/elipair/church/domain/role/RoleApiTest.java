@@ -67,7 +67,7 @@ class RoleApiTest {
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$[0].name").value("SUPER_ADMIN")) // priority 1000 최상위
                 .andExpect(jsonPath("$[0].permissions.length()")
-                        .value(16)) // V13 2건 + V14 INQUIRY_MANAGE + V15 SERMON_VIEW 포함
+                        .value(18)) // V13 2건 + V14 INQUIRY_MANAGE + V15 SERMON_VIEW + V16 VEHICLE_* 2건 포함
                 .andExpect(jsonPath("$.page").doesNotExist());
     }
 

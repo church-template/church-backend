@@ -1,11 +1,20 @@
 package com.elipair.church.domain.vehicle;
 
+import com.elipair.church.domain.vehicle.dto.MyRequestResponse;
+import com.elipair.church.domain.vehicle.dto.VehicleRequestCreateRequest;
+import com.elipair.church.domain.vehicle.dto.VehicleRequestResponse;
+import com.elipair.church.domain.vehicle.dto.VehicleRunCardResponse;
 import com.elipair.church.domain.vehicle.dto.VehicleRunCreateRequest;
 import com.elipair.church.domain.vehicle.dto.VehicleRunDetailResponse;
 import com.elipair.church.domain.vehicle.dto.VehicleRunPatchRequest;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import java.time.Clock;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -20,10 +29,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class VehicleRunService {
 
     private final VehicleRunRepository runRepository;
+    private final VehicleRequestRepository requestRepository;
     private final Clock clock;
 
-    public VehicleRunService(VehicleRunRepository runRepository, Clock clock) {
+    public VehicleRunService(
+            VehicleRunRepository runRepository, VehicleRequestRepository requestRepository, Clock clock) {
         this.runRepository = runRepository;
+        this.requestRepository = requestRepository;
         this.clock = clock;
     }
 
@@ -51,6 +63,46 @@ public class VehicleRunService {
 
     public Page<VehicleRunDetailResponse> adminList(Pageable pageable) {
         return runRepository.findByDeletedAtIsNull(pageable).map(VehicleRunDetailResponse::from);
+    }
+
+    // ---- 회원 ----
+
+    /** 다가오는 운행일 목록 + 내 신청 포함(별도 "내 신청 조회" 엔드포인트 없음 — 스펙 §API). */
+    public Page<VehicleRunCardResponse> upcoming(Long memberId, Pageable pageable) {
+        Page<VehicleRun> runs =
+                runRepository.findByDeletedAtIsNullAndDepartsAtGreaterThanEqual(LocalDateTime.now(clock), pageable);
+        List<Long> runIds = runs.stream().map(VehicleRun::getId).toList();
+        Map<Long, VehicleRequest> mine = runIds.isEmpty()
+                ? Map.of()
+                : requestRepository.findByRunIdInAndMemberIdAndDeletedAtIsNull(runIds, memberId).stream()
+                        .collect(Collectors.toMap(VehicleRequest::getRunId, Function.identity()));
+        return runs.map(run -> new VehicleRunCardResponse(
+                run.getId(),
+                run.getDepartsAt(),
+                run.getNote(),
+                mine.containsKey(run.getId()) ? MyRequestResponse.from(mine.get(run.getId())) : null));
+    }
+
+    @Transactional
+    public VehicleRequestResponse apply(Long runId, Long memberId, VehicleRequestCreateRequest req) {
+        VehicleRun run = load(runId);
+        if (run.isClosed(LocalDateTime.now(clock))) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "이미 출발한 운행일에는 신청할 수 없습니다");
+        }
+        if (requestRepository.existsByRunIdAndMemberIdAndDeletedAtIsNull(runId, memberId)) {
+            throw new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "이미 신청한 운행일입니다");
+        }
+        return VehicleRequestResponse.from(
+                requestRepository.save(VehicleRequest.create(runId, memberId, req.pickupLocation(), req.note())));
+    }
+
+    /** 본인 신청 취소(소유권 암묵 — 본인 것만 찾아 지운다). 삭제된 운행일이어도 취소는 허용. */
+    @Transactional
+    public void cancel(Long runId, Long memberId) {
+        requestRepository
+                .findByRunIdAndMemberIdAndDeletedAtIsNull(runId, memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND))
+                .softDelete();
     }
 
     private VehicleRun load(Long id) {

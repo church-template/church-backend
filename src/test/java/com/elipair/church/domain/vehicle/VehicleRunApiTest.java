@@ -42,6 +42,9 @@ class VehicleRunApiTest {
     private VehicleRunRepository runRepository;
 
     @Autowired
+    private VehicleRequestRepository requestRepository;
+
+    @Autowired
     private MemberRepository memberRepository;
 
     /** 서버의 "오늘"(APP_TIMEZONE) 기준 — JVM 기본 존과 다르면 마감 경계 테스트가 flake라 앱 Clock을 그대로 쓴다. */
@@ -63,6 +66,7 @@ class VehicleRunApiTest {
 
     @AfterEach
     void cleanup() {
+        requestRepository.deleteAll();
         runRepository.deleteAll(runRepository.findAll());
         memberRepository.deleteAll(memberRepository.findAll());
     }
@@ -189,5 +193,138 @@ class VehicleRunApiTest {
         mockMvc.perform(get("/api/admin/vehicle-runs").header("Authorization", adminToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements").value(2));
+    }
+
+    // ---- 회원: 목록·신청·취소 ----
+
+    @Test
+    void list_anonymous_is_401() throws Exception {
+        mockMvc.perform(get("/api/vehicle-runs"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_TOKEN"));
+    }
+
+    @Test
+    void list_user_without_apply_is_403() throws Exception {
+        mockMvc.perform(get("/api/vehicle-runs").header("Authorization", userToken()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void list_shows_upcoming_only_with_my_request() throws Exception {
+        createRun(now().minusDays(7), "지난 주");
+        long id = createUpcomingRun();
+
+        mockMvc.perform(get("/api/vehicle-runs").header("Authorization", memberToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].note").value("토요일 오후, 학원 앞 경유"))
+                .andExpect(jsonPath("$.content[0].myRequest").isEmpty());
+
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"OO아파트 정문","note":"동생 1명 동승"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.pickupLocation").value("OO아파트 정문"));
+
+        mockMvc.perform(get("/api/vehicle-runs").header("Authorization", memberToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].myRequest.pickupLocation").value("OO아파트 정문"))
+                .andExpect(jsonPath("$.content[0].myRequest.note").value("동생 1명 동승"));
+    }
+
+    @Test
+    void apply_twice_is_409() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"OO아파트 정문"}
+                                """))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"학교 후문"}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("DUPLICATE_RESOURCE"));
+    }
+
+    @Test
+    void apply_to_departed_run_is_400() throws Exception {
+        long id = createRun(now().minusHours(1), "이미 출발");
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"OO아파트 정문"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void apply_to_deleted_run_is_404() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(delete("/api/admin/vehicle-runs/" + id).header("Authorization", adminToken()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"OO아파트 정문"}
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    void apply_blank_pickup_location_is_400() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"  "}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void cancel_then_reapply_succeeds() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"OO아파트 정문"}
+                                """))
+                .andExpect(status().isCreated());
+        mockMvc.perform(delete("/api/vehicle-runs/" + id + "/requests/me").header("Authorization", memberToken()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"학교 후문"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.pickupLocation").value("학교 후문"));
+    }
+
+    @Test
+    void cancel_without_request_is_404() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(delete("/api/vehicle-runs/" + id + "/requests/me").header("Authorization", memberToken()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
     }
 }

@@ -1,5 +1,6 @@
 package com.elipair.church.domain.vehicle;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -298,6 +299,121 @@ class VehicleRunApiTest {
                 .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
     }
 
+    // ---- 회원: 픽업 좌표(이슈 #65) ----
+
+    @Test
+    void apply_with_coordinates_only_is_201() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"latitude":37.5,"longitude":127.0}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.latitude").value(37.5))
+                .andExpect(jsonPath("$.longitude").value(127.0));
+    }
+
+    @Test
+    void apply_with_pickup_and_coordinates_is_201() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"OO아파트 정문","latitude":37.5,"longitude":127.0}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.pickupLocation").value("OO아파트 정문"))
+                .andExpect(jsonPath("$.latitude").value(37.5))
+                .andExpect(jsonPath("$.longitude").value(127.0));
+    }
+
+    @Test
+    void apply_without_pickup_or_coordinates_is_400() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"note":"2명"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void apply_with_single_coordinate_is_400() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"latitude":37.5}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void apply_with_out_of_range_coordinate_is_400() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"정문","latitude":200,"longitude":127.0}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void list_myRequest_includes_coordinates() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"latitude":37.5,"longitude":127.0}
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/vehicle-runs").header("Authorization", memberToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].myRequest.latitude").value(37.5))
+                .andExpect(jsonPath("$.content[0].myRequest.longitude").value(127.0));
+    }
+
+    @Test
+    void apply_blank_pickup_with_coordinates_normalizes_pickup_to_null() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"  ","latitude":37.5,"longitude":127.0}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.latitude").value(37.5))
+                .andExpect(jsonPath("$.pickupLocation").value(nullValue()));
+    }
+
+    @Test
+    void apply_at_coordinate_boundaries_is_201() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"latitude":90,"longitude":-180}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.latitude").value(90.0))
+                .andExpect(jsonPath("$.longitude").value(-180.0));
+    }
+
     @Test
     void cancel_then_reapply_succeeds() throws Exception {
         long id = createUpcomingRun();
@@ -348,6 +464,23 @@ class VehicleRunApiTest {
                 .andExpect(jsonPath("$.content[0].phone").value("01011112222"))
                 .andExpect(jsonPath("$.content[0].pickupLocation").value("OO아파트 정문"))
                 .andExpect(jsonPath("$.content[0].note").value("동생 1명 동승"));
+    }
+
+    @Test
+    void roster_includes_coordinates() throws Exception {
+        long id = createUpcomingRun();
+        mockMvc.perform(post("/api/vehicle-runs/" + id + "/requests")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"pickupLocation":"OO아파트 정문","latitude":37.5,"longitude":127.0}
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/admin/vehicle-runs/" + id + "/requests").header("Authorization", adminToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].latitude").value(37.5))
+                .andExpect(jsonPath("$.content[0].longitude").value(127.0));
     }
 
     @Test

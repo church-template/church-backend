@@ -31,20 +31,31 @@ public class VehicleRequest extends BaseEntity {
     @Column(name = "member_id", nullable = false)
     private Long memberId;
 
-    @Column(name = "pickup_location", nullable = false, length = 200)
+    @Column(name = "pickup_location", length = 200)
     private String pickupLocation;
 
     @Column(columnDefinition = "TEXT")
     private String note;
 
-    private VehicleRequest(Long runId, Long memberId, String pickupLocation, String note) {
+    /** 픽업 위치 좌표(선택, 이슈 #65). 항상 쌍으로 저장(둘 다 있거나 둘 다 NULL) — 검증은 요청 DTO가 보장. */
+    @Column
+    private Double latitude;
+
+    @Column
+    private Double longitude;
+
+    private VehicleRequest(
+            Long runId, Long memberId, String pickupLocation, String note, Double latitude, Double longitude) {
         this.runId = runId;
         this.memberId = memberId;
         this.pickupLocation = pickupLocation;
         this.note = note;
+        this.latitude = latitude;
+        this.longitude = longitude;
     }
 
-    public static VehicleRequest create(Long runId, Long memberId, String pickupLocation, String note) {
-        return new VehicleRequest(runId, memberId, pickupLocation, note);
+    public static VehicleRequest create(
+            Long runId, Long memberId, String pickupLocation, String note, Double latitude, Double longitude) {
+        return new VehicleRequest(runId, memberId, pickupLocation, note, latitude, longitude);
     }
 }

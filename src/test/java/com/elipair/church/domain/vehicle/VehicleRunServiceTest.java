@@ -45,7 +45,7 @@ class VehicleRunServiceTest {
         when(requestRepository.save(any()))
                 .thenThrow(new DataIntegrityViolationException("uq_vehicle_requests_active"));
 
-        assertThatThrownBy(() -> service.apply(1L, 2L, new VehicleRequestCreateRequest("OO아파트 정문", null)))
+        assertThatThrownBy(() -> service.apply(1L, 2L, new VehicleRequestCreateRequest("OO아파트 정문", null, null, null)))
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
                         .isEqualTo(ErrorCode.DUPLICATE_RESOURCE));
     }

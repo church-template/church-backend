@@ -38,7 +38,7 @@ public class VehicleRunController {
 
                     - 인증(JWT): 필요 — `VEHICLE_APPLY`(승인 교인)
                     - 요청 파라미터: `page`·`size`·`sort` — 페이지네이션(기본 `departsAt,asc`)
-                    - 반환값: `Page<VehicleRunCardResponse>` — `id`·`departsAt`·`note`·`myRequest{pickupLocation, note}`
+                    - 반환값: `Page<VehicleRunCardResponse>` — `id`·`departsAt`·`note`·`myRequest{pickupLocation, note, latitude, longitude}`
                     """)
     @GetMapping("/api/vehicle-runs")
     public Page<VehicleRunCardResponse> list(
@@ -52,9 +52,9 @@ public class VehicleRunController {
 
                     - 인증(JWT): 필요 — `VEHICLE_APPLY`(승인 교인)
                     - 경로 변수: `id` — 운행일 ID
-                    - 요청 본문: `VehicleRequestCreateRequest` — `pickupLocation`(필수, 최대 200자)·`note`(동승 인원·특이사항, 선택)
-                    - 반환값: `VehicleRequestResponse`
-                    - 부수효과: 중복 신청 409(`DUPLICATE_RESOURCE`) · 출발 시각 경과 400 · 없는/삭제된 운행일 404
+                    - 요청 본문: `VehicleRequestCreateRequest` — `pickupLocation`(선택, 최대 200자)·`note`(선택)·`latitude`/`longitude`(선택, 위경도 좌표). 픽업 텍스트와 좌표 중 최소 하나는 필수
+                    - 반환값: `VehicleRequestResponse` — 저장된 픽업 텍스트·좌표 포함
+                    - 부수효과: 중복 신청 409(`DUPLICATE_RESOURCE`) · 출발 시각 경과 400 · 없는/삭제된 운행일 404 · 픽업·좌표 모두 없음/좌표 한쪽만/범위 초과 400(`INVALID_INPUT_VALUE`)
                     """)
     @PostMapping("/api/vehicle-runs/{id}/requests")
     public ResponseEntity<VehicleRequestResponse> apply(

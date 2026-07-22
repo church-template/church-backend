@@ -92,7 +92,9 @@ public class VehicleRunService {
                 phones.get(request.getMemberId()),
                 request.getPickupLocation(),
                 request.getNote(),
-                request.getCreatedAt()));
+                request.getCreatedAt(),
+                request.getLatitude(),
+                request.getLongitude()));
     }
 
     // ---- 회원 ----
@@ -122,9 +124,11 @@ public class VehicleRunService {
         if (requestRepository.existsByRunIdAndMemberIdAndDeletedAtIsNull(runId, memberId)) {
             throw new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "이미 신청한 운행일입니다");
         }
+        // 공백만인 픽업 텍스트는 저장하지 않는다(좌표만 첨부한 원탭 신청 — DTO 검증이 "최소 하나"를 이미 보장).
+        String pickup = req.hasPickup() ? req.pickupLocation() : null;
         try {
-            return VehicleRequestResponse.from(
-                    requestRepository.save(VehicleRequest.create(runId, memberId, req.pickupLocation(), req.note())));
+            return VehicleRequestResponse.from(requestRepository.save(
+                    VehicleRequest.create(runId, memberId, pickup, req.note(), req.latitude(), req.longitude())));
         } catch (DataIntegrityViolationException e) {
             // 동시 중복 신청 레이스: exists 선검사를 동시에 통과해도 uq_vehicle_requests_active가 백스톱 — 500 대신 409
             throw new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "이미 신청한 운행일입니다");

@@ -2,6 +2,7 @@ package com.elipair.church.domain.challenge;
 
 import com.elipair.church.domain.challenge.dto.ChallengeCardResponse;
 import com.elipair.church.domain.challenge.dto.ChallengeDetailResponse;
+import com.elipair.church.domain.challenge.dto.ChallengeParticipantResponse;
 import com.elipair.church.domain.challenge.dto.ChallengeReadRequest;
 import com.elipair.church.domain.challenge.dto.MyParticipationResponse;
 import com.elipair.church.domain.challenge.dto.MyProgressResponse;
@@ -67,6 +68,23 @@ public class BibleChallengeController {
     @GetMapping("/api/bible-challenges/{id}")
     public ChallengeDetailResponse get(@PathVariable Long id, @AuthenticationPrincipal MemberPrincipal principal) {
         return challengeService.get(id, principal.id());
+    }
+
+    @Operation(summary = "참여자 진도 명단", description = """
+                    같은 챌린지 참여자들의 진도 명단(진도순 정렬, 순위 숫자 없음).
+
+                    - 인증(JWT): 필요 — `CHALLENGE_PARTICIPATE` + **호출자가 해당 챌린지 참여자**여야 한다(아니면 403 ACCESS_DENIED)
+                    - 경로 변수: `id`
+                    - 요청 파라미터: `page`·`size`(기본 10) — `sort`는 무시된다(정렬은 누적 장 수로 고정)
+                    - 반환값: `Page<ChallengeParticipantResponse>` — 이름·진도·현재 위치·`me`(본인 행)
+                    - 비고: 탈퇴 회원은 제외 · `currentPosition` null = 현재 회독 시작 전
+                    """)
+    @GetMapping("/api/bible-challenges/{id}/participants")
+    public Page<ChallengeParticipantResponse> participants(
+            @PathVariable Long id,
+            @AuthenticationPrincipal MemberPrincipal principal,
+            @PageableDefault(size = 10) Pageable pageable) {
+        return progressService.participants(id, principal.id(), pageable);
     }
 
     @Operation(summary = "챌린지 참여", description = """

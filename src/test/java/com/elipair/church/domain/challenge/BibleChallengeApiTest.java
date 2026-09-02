@@ -402,4 +402,89 @@ class BibleChallengeApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
     }
+
+    // ---- 회원: 참여자 진도 명단(#68) ----
+
+    /** 다른 참여자 토큰 — 명단은 여러 회원이 있어야 정렬·me 플래그를 검증할 수 있다. */
+    private String tokenFor(Long id, String uuid) {
+        return "Bearer "
+                + provider.issueAccess(
+                        new MemberPrincipal(id, uuid, "교인", 100), null, List.of("CHALLENGE_PARTICIPATE"));
+    }
+
+    private Long joinAndRead(long challengeId, String phone, String name, int chapters) throws Exception {
+        Long id = memberRepository
+                .saveAndFlush(Member.create(phone, name, "{enc}", null, null, true, true))
+                .getId();
+        String token = tokenFor(id, "uuid-" + phone);
+        mockMvc.perform(post("/api/bible-challenges/" + challengeId + "/join").header("Authorization", token))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/bible-challenges/" + challengeId + "/read")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chapters\":%d}".formatted(chapters)))
+                .andExpect(status().isOk());
+        return id;
+    }
+
+    /** 정렬 키는 누적 총 장 수 — 1회독을 마쳐 포인터가 0으로 리셋된 참여자가 맨 위여야 한다(설계 §2). */
+    @Test
+    void participants_sorted_by_total_chapters_read() throws Exception {
+        long id = createNtChallenge();
+        mockMvc.perform(post("/api/bible-challenges/" + id + "/join").header("Authorization", memberToken()))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/bible-challenges/" + id + "/read")
+                        .header("Authorization", memberToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chapters\":5}"))
+                .andExpect(status().isOk());
+        joinAndRead(id, "01011112222", "박완주", 260); // 260장 = 1회독 완료 → chaptersRead 0
+
+        mockMvc.perform(get("/api/bible-challenges/" + id + "/participants").header("Authorization", memberToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(2))
+                .andExpect(jsonPath("$.content[0].name").value("박완주"))
+                .andExpect(jsonPath("$.content[0].roundsCompleted").value(1))
+                .andExpect(jsonPath("$.content[0].chaptersRead").value(0))
+                .andExpect(jsonPath("$.content[0].currentPosition").doesNotExist())
+                .andExpect(jsonPath("$.content[0].me").value(false))
+                .andExpect(jsonPath("$.content[1].name").value("김통독"))
+                .andExpect(jsonPath("$.content[1].chaptersRead").value(5))
+                .andExpect(jsonPath("$.content[1].currentPosition.book").value("마태복음"))
+                .andExpect(jsonPath("$.content[1].currentPosition.chapter").value(5))
+                .andExpect(jsonPath("$.content[1].me").value(true));
+    }
+
+    @Test
+    void participants_without_join_is_403() throws Exception {
+        long id = createNtChallenge();
+        joinAndRead(id, "01011112222", "박완주", 5);
+        mockMvc.perform(get("/api/bible-challenges/" + id + "/participants").header("Authorization", memberToken()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void participants_excludes_withdrawn_member() throws Exception {
+        long id = createNtChallenge();
+        mockMvc.perform(post("/api/bible-challenges/" + id + "/join").header("Authorization", memberToken()))
+                .andExpect(status().isCreated());
+        Long other = joinAndRead(id, "01011112222", "박탈퇴", 10);
+        memberRepository.findById(other).ifPresent(m -> {
+            m.softDelete();
+            memberRepository.saveAndFlush(m);
+        });
+
+        mockMvc.perform(get("/api/bible-challenges/" + id + "/participants").header("Authorization", memberToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].name").value("김통독"));
+    }
+
+    @Test
+    void participants_of_missing_challenge_is_404() throws Exception {
+        mockMvc.perform(get("/api/bible-challenges/999999/participants").header("Authorization", memberToken()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
+    }
 }

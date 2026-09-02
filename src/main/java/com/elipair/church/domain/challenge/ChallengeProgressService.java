@@ -1,6 +1,7 @@
 package com.elipair.church.domain.challenge;
 
 import com.elipair.church.domain.challenge.dto.BiblePositionResponse;
+import com.elipair.church.domain.challenge.dto.ChallengeParticipantResponse;
 import com.elipair.church.domain.challenge.dto.ChallengeReadRequest;
 import com.elipair.church.domain.challenge.dto.ChallengeSummaryResponse;
 import com.elipair.church.domain.challenge.dto.MyParticipationResponse;
@@ -17,6 +18,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -117,6 +119,28 @@ public class ChallengeProgressService {
                 .toList();
     }
 
+    /**
+     * 참여자 진도 명단(#68). 열람 자격 = 그 챌린지 참여자(내 진도를 공개하는 대가로 남의 진도를 본다) — 아니면 403.
+     * 정렬은 쿼리가 누적 장 수로 고정한다: 클라이언트 sort 파라미터를 그대로 넘기면 native order by 뒤에 덧붙어 순서가 깨진다.
+     */
+    public Page<ChallengeParticipantResponse> participants(Long challengeId, Long memberId, Pageable pageable) {
+        BibleChallenge challenge = loadChallenge(challengeId);
+        if (!participationRepository.existsByChallengeIdAndMemberIdAndDeletedAtIsNull(challengeId, memberId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED, "챌린지에 참여해야 참여자 명단을 볼 수 있습니다");
+        }
+        int totalChapters = challenge.totalChapters();
+        Pageable fixedOrder = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        return participationRepository
+                .findParticipants(challengeId, totalChapters, fixedOrder)
+                .map(row -> new ChallengeParticipantResponse(
+                        row.getName(),
+                        row.getChaptersRead(),
+                        progressRate(row.getChaptersRead(), totalChapters),
+                        row.getRoundsCompleted(),
+                        locate(challenge, row.getChaptersRead()),
+                        row.getMemberId().equals(memberId)));
+    }
+
     public Page<MyParticipationResponse> myParticipations(Long memberId, Pageable pageable) {
         LocalDate today = LocalDate.now(clock);
         Page<ChallengeParticipation> page =
@@ -159,14 +183,9 @@ public class ChallengeProgressService {
                         .findByParticipationIdAndReadDate(p.getId(), today)
                         .map(ChallengeReadingLog::getChapters)
                         .orElse(0);
-        BiblePositionResponse position = null;
-        if (p.getChaptersRead() > 0) {
-            BibleStructure.BiblePosition located = BibleStructure.locate(challenge.getStartBook(), p.getChaptersRead());
-            position = new BiblePositionResponse(located.book(), located.chapter());
-        }
         return new MyProgressResponse(
                 progressRate(p, challenge),
-                position,
+                locate(challenge, p.getChaptersRead()),
                 p.getChaptersRead(),
                 challenge.totalChapters(),
                 todayChapters,
@@ -180,7 +199,20 @@ public class ChallengeProgressService {
 
     /** 현재 회독 기준 %, 소수 1자리 반올림(설계 §3). */
     private double progressRate(ChallengeParticipation p, BibleChallenge challenge) {
-        return Math.round(p.getChaptersRead() * 1000.0 / challenge.totalChapters()) / 10.0;
+        return progressRate(p.getChaptersRead(), challenge.totalChapters());
+    }
+
+    private double progressRate(int chaptersRead, int totalChapters) {
+        return Math.round(chaptersRead * 1000.0 / totalChapters) / 10.0;
+    }
+
+    /** 포인터 0(현재 회독 시작 전)이면 null — locate는 1-based ordinal만 받는다. */
+    private BiblePositionResponse locate(BibleChallenge challenge, int chaptersRead) {
+        if (chaptersRead <= 0) {
+            return null;
+        }
+        BibleStructure.BiblePosition located = BibleStructure.locate(challenge.getStartBook(), chaptersRead);
+        return new BiblePositionResponse(located.book(), located.chapter());
     }
 
     /** 연속 기록 일수 — 오늘 기록이 없으면 어제부터 역산(오늘은 아직 기회가 있다). 소급 백필로 치유된다(설계 §3). */

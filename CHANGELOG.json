@@ -1,11 +1,28 @@
 {
   "metadata": {
-    "lastUpdated": "2026-09-02T16:52:39Z",
-    "currentVersion": "0.0.44",
+    "lastUpdated": "2026-09-03T12:52:25Z",
+    "currentVersion": "0.0.45",
     "projectType": "spring",
-    "totalReleases": 7
+    "totalReleases": 8
   },
   "releases": [
+    {
+      "version": "0.0.45",
+      "project_type": "spring",
+      "date": "2026-09-03",
+      "pr_number": 73,
+      "raw_summary": "## Summary by CodeRabbit\n\n## 릴리스 노트\n\n* **기타**\n\n  * Merge pull request #72 from church-template/20260903_#71_배포_시_GHCR_로그인_서버_영구_자격증명_제거\n  * feat : 배포 시 GHCR 로그인으로 서버 영구 자격증명 제거 #71\n\n> 💡 더 정확한 릴리스 노트를 원한다면 Claude Code에서 `/github` 스킬로 PR 릴리스 노트를 업데이트할 수 있습니다.",
+      "parsed_changes": {
+        "기타": {
+          "title": "기타",
+          "items": [
+            "Merge pull request #72 from church-template/20260903_#71_배포_시_GHCR_로그인_서버_영구_자격증명_제거",
+            "feat : 배포 시 GHCR 로그인으로 서버 영구 자격증명 제거 #71"
+          ]
+        }
+      },
+      "parse_method": "markdown"
+    },
     {
       "version": "0.0.44",
       "project_type": "spring",

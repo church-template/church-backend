@@ -3,6 +3,7 @@
 # workflow_dispatch의 image_tag 입력 = 해당 태그로 빌드 없이 재배포(롤백 경로).
 # DEPLOY_HOST 시크릿이 비어 있으면 서버 배포는 건너뛰고 이미지 push까지만 수행한다
 # (서버 준비 전에도 파이프라인이 그린 상태를 유지).
+# GHCR 인증은 배포 때마다 GITHUB_TOKEN으로 하고 끝나면 로그아웃한다 — 서버에 영구 자격증명을 두지 않는다(#71).
 name: Deploy
 
 on:
@@ -76,6 +77,9 @@ jobs:
     # build-push가 skip된 경우(image_tag 재배포)에도 실행되어야 한다
     if: ${{ always() && (needs.build-push.result == 'success' || needs.build-push.result == 'skipped') }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read # 서버가 pull할 때 쓰는 단기 토큰 — push는 build-push job에만
     env:
       # image_tag 입력이 있으면 그 태그로, 없으면 방금 빌드한 버전으로 배포
       IMAGE_TAG: ${{ inputs.image_tag != '' && inputs.image_tag || needs.build-push.outputs.version }}
@@ -108,18 +112,27 @@ jobs:
           source: "docker-compose.yml,docker-compose.prod.yml"
           target: /srv/church-backend
 
-      - name: 서버 배포 (pull & up)
+      # GHCR 패키지가 private이라 pull에 인증이 필요하다. 서버에 영구 자격증명(수동 docker login)을
+      # 두면 그 토큰이 삭제·회수되는 순간 배포만 조용히 깨진다(#71). 배포할 때마다 job 수명만큼만
+      # 유효한 GITHUB_TOKEN으로 로그인하고 끝나면 로그아웃해, 서버에 남는 자격증명이 없게 한다.
+      - name: 서버 배포 (login & pull & up)
         if: steps.gate.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           # envs로 전달해 원격 셸에 export — script에 ${{ }} 직접 템플릿하면
           # workflow_dispatch 입력값이 따옴표를 깨고 명령 주입될 수 있다(zizmor template-injection)
-          envs: IMAGE_NAME,IMAGE_TAG
+          envs: IMAGE_NAME,IMAGE_TAG,GHCR_USER,GHCR_TOKEN
           script: |
             set -e
+            # 헬스 게이트 실패로 중단돼도 자격증명을 남기지 않는다
+            trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             cd /srv/church-backend
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d

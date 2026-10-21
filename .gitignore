@@ -52,3 +52,6 @@ out/
 # 로컬 개발 전용 compose 오버라이드(DB 포트 노출 등) — 운영에 올라가면 안 됨
 docker-compose.override.yml
 .DS_Store
+
+# 설계·계획 문서 (로컬 전용)
+docs/superpowers/

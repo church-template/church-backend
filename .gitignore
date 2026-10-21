@@ -55,3 +55,6 @@ docker-compose.override.yml
 
 # 설계·계획 문서 (로컬 전용)
 docs/superpowers/
+
+### Archify (다이어그램 원본·검증 산출물) ###
+.archify/

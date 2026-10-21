@@ -34,6 +34,16 @@
 
 API 문서는 Swagger UI(`/docs/swagger-ui.html`, spec: `/v3/api-docs`)로 확인합니다. `SWAGGER_ENABLED`로 끌 수 있습니다.
 
+## 아키텍처
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/architecture-dark.svg">
+  <img alt="은샘교회 백엔드 런타임·배포 구조: 브라우저 → Caddy(HTTPS) → Spring Boot API → PostgreSQL·Redis·업로드 볼륨, GitHub Actions → GHCR → 서버 pull" src="docs/images/architecture-light.svg" width="100%">
+</picture>
+
+요청은 Caddy가 HTTPS를 종료한 뒤 Spring Boot로 넘기고, JWT 필터와 경로·권한 인가를 거쳐 PostgreSQL·Redis·업로드 볼륨에 닿습니다.
+점선은 배포 경로입니다. 서버 한 대(Docker Compose)가 교회 하나이며, 교회별 값은 `.env`로만 달라집니다.
+
 ## 설계 원칙
 
 - **멀티테넌시 대신 교회마다 별도 인스턴스**: `church_id`·`tenant_id` 컬럼을 두지 않고, 교회마다 DB와 배포를 따로 두어 데이터 격리를 인프라에 맡깁니다.

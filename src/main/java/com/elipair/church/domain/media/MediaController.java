@@ -41,7 +41,7 @@ public class MediaController {
     @GetMapping("/api/media/{id}")
     public ResponseEntity<Resource> serve(
             @PathVariable Long id,
-            @RequestParam(required = false) Long exp,
+            @RequestParam(required = false) String exp,
             @RequestParam(required = false) String sig) {
         MediaContent content = service.serve(id, exp, sig);
         ContentDisposition disposition = ContentDisposition.inline()

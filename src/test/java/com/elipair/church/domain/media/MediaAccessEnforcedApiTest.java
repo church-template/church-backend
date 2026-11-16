@@ -358,4 +358,51 @@ class MediaAccessEnforcedApiTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "public, max-age=86400"));
     }
+
+    @Test
+    void 숫자가_아닌_exp는_404() throws Exception {
+        long priv = upload(JPEG, "a.jpg", "image/jpeg");
+        long pub = upload(JPEG, "b.jpg", "image/jpeg");
+        noticeWith(pub);
+
+        for (long id : new long[] {priv, pub}) {
+            mockMvc.perform(get("/api/media/" + id).param("exp", "abc").param("sig", "x"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
+        }
+    }
+
+    @Test
+    void 너무_큰_exp는_404() throws Exception {
+        long priv = upload(JPEG, "a.jpg", "image/jpeg");
+        long pub = upload(JPEG, "b.jpg", "image/jpeg");
+        noticeWith(pub);
+
+        for (long id : new long[] {priv, pub}) {
+            mockMvc.perform(get("/api/media/" + id)
+                            .param("exp", "99999999999999999999999")
+                            .param("sig", "x"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
+        }
+    }
+
+    @Test
+    void 부서에_연결된_앨범의_사진은_익명으로_200_public_캐시() throws Exception {
+        long id = upload(JPEG, "a.jpg", "image/jpeg");
+        GalleryAlbum album = albumRepository.saveAndFlush(GalleryAlbum.create("앨범", "설명"));
+        photoRepository.saveAndFlush(GalleryPhoto.create(album.getId(), id, 0));
+        Department dept = Department.create("청년부", "설명", null, null, 0);
+        dept.changeAlbum(album.getId());
+        departmentRepository.saveAndFlush(dept);
+
+        mockMvc.perform(get("/api/media/" + id))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "public, max-age=86400"));
+
+        dept.changeAlbum(null);
+        departmentRepository.saveAndFlush(dept);
+
+        mockMvc.perform(get("/api/media/" + id)).andExpect(status().isNotFound());
+    }
 }

@@ -163,14 +163,20 @@ public class MediaService {
      * exp·sig가 둘 다 있으면 서명만 본다(틀리면 404). 둘 중 하나만 있어도 404. 없으면 공개 근거 참조가 있어야 public 캐시로 내려가고,
      * 아니면 차단 켜짐일 때 404(존재 여부를 드러내지 않는다), 꺼짐이면 private 캐시로 내려간다.
      */
-    public MediaContent serve(Long id, Long exp, String sig) {
+    public MediaContent serve(Long id, String exp, String sig) {
         Media media = findById(id);
         String cacheControl;
         if (exp != null && sig != null) {
-            if (!signer.verify(id, exp, sig)) {
+            long expSeconds;
+            try {
+                expSeconds = Long.parseLong(exp);
+            } catch (NumberFormatException e) { // 숫자가 아니거나 범위 초과 — 서명 실패와 같게 404
                 throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
             }
-            cacheControl = "private, max-age=" + (exp - clock.instant().getEpochSecond());
+            if (!signer.verify(id, expSeconds, sig)) {
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+            }
+            cacheControl = "private, max-age=" + (expSeconds - clock.instant().getEpochSecond());
         } else if (exp != null || sig != null) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
         } else if (isPublic(id)) {

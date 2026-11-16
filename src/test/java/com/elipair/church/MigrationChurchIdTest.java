@@ -111,7 +111,7 @@ class MigrationChurchIdTest {
 
     @Test
     void church_id를_생략한_INSERT는_첫_교회로_들어간다() {
-        // V20 전까지의 되돌리기 전제: 옛 이미지가 church_id 없이 INSERT해도 첫 교회로 들어간다.
+        // V21 전까지의 되돌리기 전제: 옛 이미지가 church_id 없이 INSERT해도 첫 교회로 들어간다.
         exec("insert into tags(name, created_at) values ('default-check', now())");
         Object churchId = em.createNativeQuery("select church_id from tags where name = 'default-check'")
                 .getSingleResult();

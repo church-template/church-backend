@@ -16,9 +16,19 @@ Bodies embed the literal string `media:{id}` (see [[api-conventions]]); there is
 
 Union of both = the reference list. This is intentional (free image placement anywhere in markdown); the cost is LIKE-based tracking.
 
+## Serving: public only if used by public content, else signed URL
+
+`GET /api/media/{id}` needs no JWT, but anonymous access depends on what uses the media (decided per request via `MediaReferenceProvider.grantsPublicAccess()`):
+
+- **Public**: used by a notice/event/department body, a department hero image (`departments.hero_media_id`), a photo of an album linked to a department (`departments.album_id`), or a bulletin → `200` + `Cache-Control: public, max-age=86400`.
+- **Not public**: sermon bodies, gallery photos, gallery album descriptions (members-only content) never make media public. Without a valid signature → `404 RESOURCE_NOT_FOUND` (never 403) when `media.access-enforced` (`MEDIA_ACCESS_ENFORCED`) is true; while it is false (default, cut-over period) → `200` with `private, max-age=86400`.
+- **Signed URL**: `/api/media/{id}?exp={epochSeconds}&sig={base64url}`, no church prefix, valid 3600s, HMAC-SHA256 over `churchId:mediaId:exp` with a key derived from `JWT_SECRET` (`MediaUrlSigner`). Valid → `200` + `private, max-age=<remaining>`; invalid/expired/only one of `exp`/`sig` → 404. Gallery album responses (`thumbnailUrl`, photo `url`, `mediaUrls`) and admin media responses (`url`) hand them out; the frontend builds `${NEXT_PUBLIC_API_BASE}${url}`.
+- Linking an album to a department makes all its photos public. Only reference providers that grant public access may count (department/notice/event/bulletin); new providers default to `false`.
+- Taking a photo down: unlink it (clear the hero image / remove it from the album / edit the body) → blocking delete in the library → address is 404 (browsers that loaded it may keep it up to 1 day).
+
 ## Deletion is blocking
 
-- `DELETE /api/admin/media/{id}`: if **any** reference exists (body or FK), reject with `409 MEDIA_IN_USE` and return the `references` list. Never delete a file that's in use.
+- `DELETE /api/admin/media/{id}`: if **any** reference exists (body, hero image, or FK), reject with `409 MEDIA_IN_USE` and return the `references` list. Never delete a file that's in use.
 - Only when references hit zero does delete remove **both** the file and the record.
 - Removing a photo from an album or deleting an album is **un-linking only** — the `media` original stays in the library. Real deletion happens **only** through the blocking media delete above.
 

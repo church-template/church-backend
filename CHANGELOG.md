@@ -1,7 +1,30 @@
 # Changelog
 
-**현재 버전:** 0.0.54  
-**마지막 업데이트:** 2026-11-14T14:28:58Z  
+**현재 버전:** 0.0.56  
+**마지막 업데이트:** 2026-11-16T14:21:40Z  
+
+---
+
+## [0.0.56] - 2026-11-16
+
+**PR:** #94  
+
+**기타**
+- Merge pull request #93 from church-template/20261116_#92_기능추가_부서_부서_사진_연결_미디어_캐시
+- docs : 미디어 참조 추적 예시를 숫자 경계 정규식으로 정정 https://github.com/church-template/church-backend/issues/92
+- docs : 프론트 전달 문서 추가 https://github.com/church-template/church-backend/issues/92
+- docs : 에디터 미리보기·next/image 캐시 주의 문서화 https://github.com/church-template/church-backend/issues/92
+- fix : 잘못된 exp 서명 파라미터를 404로 처리하고 부서 앨범 공개 테스트 추가 https://github.com/church-template/church-backend/issues/92
+- docs : 미디어 차단 전 설교 본문 점검 절차 추가 https://github.com/church-template/church-backend/issues/92
+- docs : 미디어 공개 범위·부서 사진 문서 갱신 https://github.com/church-template/church-backend/issues/92
+- fix : 앨범 설명의 너무 큰 media id로 상세가 500이 되는 문제 수정 https://github.com/church-template/church-backend/issues/92
+- feat : 갤러리·관리 미디어 응답에 서명 주소 추가 https://github.com/church-template/church-backend/issues/92
+- chore : #92 변경 파일 spotless 포맷 적용 https://github.com/church-template/church-backend/issues/92
+- feat : 미디어 공개 판단과 서명 주소 서빙 https://github.com/church-template/church-backend/issues/92
+- feat : 부서 대표 사진·앨범 연결 API와 공개 응답 https://github.com/church-template/church-backend/issues/92
+- feat : 부서 대표 사진·앨범 컬럼과 미디어 참조 추가 https://github.com/church-template/church-backend/issues/92
+- Merge pull request #91 from church-template/20261116_#90_기능개선_배포_컨테이너_재시작_정책_추가와_무중단_배포
+- feat : 운영 compose에 컨테이너 재시작 정책 추가 https://github.com/church-template/church-backend/issues/90
 
 ---
 

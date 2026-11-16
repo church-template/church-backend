@@ -56,6 +56,7 @@ Roles and positions are **per church** (`(church_id, name)` unique): each church
 | 6 | `/api/vehicle-runs/**` | `VEHICLE_APPLY` (승인 교인 전용) |
 | 7 | 나머지 `/api/**` (공지·행사·주보·부서·문의·메인 등) | public |
 
+- 7번에 속하는 `GET /api/media/{id}`는 JWT가 필요 없지만 **공개 콘텐츠(공지·행사·부서·주보)에 쓰인 미디어만** 익명에게 열린다. 그 외(설교·갤러리에만 쓰인 것)는 서명 주소(`?exp=&sig=`)가 있어야 하고, 없으면 `MEDIA_ACCESS_ENFORCED=true`일 때 404다. 경로 매처가 아니라 `MediaService.serve`가 판단하므로 매처 표는 바꾸지 않는다 — [[media-library]].
 - `/api/main`(통합 조회)은 **의도적으로 public 유지** — 설교 카드가 홈에 노출돼도 상세(`/api/sermons/{id}`) 클릭은 차단된다(#53 설계 결정).
 - `MEMBER` role = 승인 교인 — `GALLERY_VIEW`·`SERMON_VIEW`·`CHALLENGE_PARTICIPATE`·`VEHICLE_APPLY` 보유(V2·V13·V15·V16 시드). 가입 직후 기본 `USER`와 익명은 회원전용 경로에서 차단. `MEMBER` 부여가 곧 교인 승인 절차다(이메일 인증 대체).
 - 새 회원전용 경로를 추가할 땐 `anyRequest().permitAll()` **앞에** 매처를 넣고, 이 표와 CLAUDE.md 요약도 함께 갱신할 것.

@@ -15,4 +15,5 @@ public record GalleryAlbumCardResponse(
         long photoCount,
         LocalDateTime createdAt,
         List<TagResponse> tags,
-        String author) {}
+        String author,
+        String thumbnailUrl) {}

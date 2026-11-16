@@ -35,9 +35,9 @@ public class AdminDepartmentController {
                     새 부서를 생성한다.
 
                     - 인증(JWT): 필요 — `DEPT_WRITE`
-                    - 요청 본문: `DepartmentCreateRequest` — 이름·description·담당(leader)·`parentId`(null=루트)·`sortOrder`(미지정 시 max+10 append)
+                    - 요청 본문: `DepartmentCreateRequest` — 이름·description·담당(leader)·`parentId`(null=루트)·`sortOrder`(미지정 시 max+10 append)·`heroMediaId`·`albumId`(대표 사진·연결 앨범, 선택)
                     - 반환값: `DepartmentDetailResponse` — 생성된 부서 상세(201)
-                    - 부수효과: `parentId` 지정 시 상위 부서 존재·미삭제 검증(미존재 400 INVALID_INPUT_VALUE)
+                    - 부수효과: `parentId` 지정 시 상위 부서 존재·미삭제 검증(미존재 400 INVALID_INPUT_VALUE) · `heroMediaId`는 존재하는 이미지, `albumId`는 미삭제 앨범이어야 함(아니면 400 INVALID_INPUT_VALUE)
                     """)
     @PostMapping("/api/admin/departments")
     public ResponseEntity<DepartmentDetailResponse> create(@Valid @RequestBody DepartmentCreateRequest request) {
@@ -49,7 +49,7 @@ public class AdminDepartmentController {
 
                     - 인증(JWT): 필요 — `DEPT_WRITE`
                     - 경로 변수: `id` — 수정할 부서 ID
-                    - 요청 본문: `DepartmentUpdateRequest` — 이름·description·담당·`parentId`(null=루트화)·`sortOrder`(null=기존 유지)·`version`(필수)
+                    - 요청 본문: `DepartmentUpdateRequest` — 이름·description·담당·`parentId`(null=루트화)·`sortOrder`(null=기존 유지)·`version`(필수)·`heroMediaId`·`albumId`(새 칸: 안 보내면 유지, null이면 비움, 숫자면 설정 — 잘못된 id는 400 INVALID_INPUT_VALUE)
                     - 반환값: `DepartmentDetailResponse` — 수정된 부서 상세
                     - 부수효과: `version` 불일치 시 409 OPTIMISTIC_LOCK_CONFLICT · 상위 부서 검증(자기참조·순환·미존재 400 INVALID_INPUT_VALUE)
                     """)
@@ -63,7 +63,7 @@ public class AdminDepartmentController {
 
                     - 인증(JWT): 필요 — `DEPT_WRITE`
                     - 경로 변수: `id` — 수정할 부서 ID
-                    - 요청 본문: `DepartmentPatchRequest` — 이름·description·담당·`parentId`(null=미변경; 루트화는 PUT)·`sortOrder`(null=미변경)·`version`(필수)
+                    - 요청 본문: `DepartmentPatchRequest` — 이름·description·담당·`parentId`(null=미변경; 루트화는 PUT)·`sortOrder`(null=미변경)·`version`(필수)·`heroMediaId`·`albumId`(새 칸: 안 보내면 유지, null이면 비움, 숫자면 설정 — 잘못된 id는 400 INVALID_INPUT_VALUE)
                     - 반환값: `DepartmentDetailResponse` — 수정된 부서 상세
                     - 부수효과: `version` 불일치 시 409 OPTIMISTIC_LOCK_CONFLICT · `parentId` 변경 시 상위 부서 검증(자기참조·순환·미존재 400 INVALID_INPUT_VALUE)
                     """)

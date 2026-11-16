@@ -29,7 +29,7 @@
 
 | 키 | 용도 | 프론트 사용처 |
 |---|---|---|
-| `NEXT_PUBLIC_API_BASE` (프론트 env) | 교회 접두사를 포함한 API 베이스 `https://<공용API>/church/<slug>` | 모든 API 호출과 미디어 URL의 앞부분. `media:{id}` → `${NEXT_PUBLIC_API_BASE}/api/media/{id}`(5장). `next/image` 허용 패턴도 접두사를 포함한 경로(`/church/<slug>/api/media/**`)여야 한다 |
+| `NEXT_PUBLIC_API_BASE` (프론트 env) | 교회 접두사를 포함한 API 베이스 `https://<공용API>/church/<slug>` | 모든 API 호출과 미디어 URL의 앞부분. `media:{id}` → `${NEXT_PUBLIC_API_BASE}/api/media/{id}`(5장), 서명 주소는 `${NEXT_PUBLIC_API_BASE}${url}`(5.2). `next/image` 허용 패턴도 접두사를 포함한 경로(`/church/<slug>/api/media/**`)여야 하고, 쿼리(`?exp=…&sig=…`)가 붙으므로 `remotePatterns`에 `search`를 지정하지 않는다(5.2) |
 | `FILE_BASE_URL` (서버 env) | — | 서버에 바인딩만 되고 쓰이지 않는 설정이다. 프론트는 의존하지 않는다 |
 | `JWT_ACCESS_EXPIRY` / `JWT_REFRESH_EXPIRY` | 토큰 수명(1h / 14d) | **프론트가 하드코딩 금지** — 만료는 401 응답으로 감지하고 refresh로 대응(1장) |
 
@@ -145,7 +145,7 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
 | `MEMBER_MANAGE` | 회원 조회·수정·비번초기화, 약관 일괄리셋 | `/api/members`(조회), `/api/admin/members/{uuid}`, `/api/admin/agreements/reset` |
 | `ROLE_MANAGE` | 역할/권한 관리, 회원 역할 부여/회수 | `/api/admin/roles`, `/api/admin/permissions`, `/api/admin/members/{uuid}/roles` |
 
-> **주의 — 경로만 보면 헷갈리는 곳**: 회원 조회 `GET /api/members`·`GET /api/members/{uuid}`는 `/api/admin/**`가 아니지만 **`MEMBER_MANAGE`로 메서드 보안**이 걸려 있다(경로 규칙상 공개로 보여도 실제 차단). 반대로 `GET /api/positions`, `GET /api/tags`, `GET /api/bulletins`, `GET /api/main`, `GET /api/media/{id}`는 **공개**다.
+> **주의 — 경로만 보면 헷갈리는 곳**: 회원 조회 `GET /api/members`·`GET /api/members/{uuid}`는 `/api/admin/**`가 아니지만 **`MEMBER_MANAGE`로 메서드 보안**이 걸려 있다(경로 규칙상 공개로 보여도 실제 차단). 반대로 `GET /api/positions`, `GET /api/tags`, `GET /api/bulletins`, `GET /api/main`은 **공개**다. `GET /api/media/{id}`는 JWT가 필요 없지만 **공개 콘텐츠에 쓰인 미디어만** 익명에게 열린다(5.2).
 
 ### 2.3 경로 인가 3분법
 
@@ -296,9 +296,14 @@ async function handleApiError(res: Response): Promise<never> {
 
 ### 5.2 `media:{id}` → URL 치환
 
-본문 속 이미지·PDF는 URL이 아니라 **`media:{id}` 리터럴**로 참조된다(`![alt](media:42)`, `[제목](media:42)`). 렌더 전에 실제 서빙 URL `GET /api/media/{id}`(공개)로 치환한다. 이 모델 덕에 본문이 교회별 베이스 URL과 무관하게 동일하다. **치환 결과는 교회 접두사를 포함한 절대 URL**(`${NEXT_PUBLIC_API_BASE}/api/media/{id}`)이어야 한다 — 상대경로 `/api/media/{id}`는 접두사가 없어 교회를 정할 수 없다. 다른 교회의 미디어 id는 404다.
+본문 속 이미지·PDF는 URL이 아니라 **`media:{id}` 리터럴**로 참조된다(`![alt](media:42)`, `[제목](media:42)`). 렌더 전에 실제 서빙 URL `GET /api/media/{id}`로 치환한다. 이 모델 덕에 본문이 교회별 베이스 URL과 무관하게 동일하다. **치환 결과는 교회 접두사를 포함한 절대 URL**(`${NEXT_PUBLIC_API_BASE}/api/media/{id}`)이어야 한다 — 상대경로 `/api/media/{id}`는 접두사가 없어 교회를 정할 수 없다. 다른 교회의 미디어 id는 404다.
 
 - `GET /api/media/{id}`는 파일 바이트를 반환하며 응답에 `X-Content-Type-Options: nosniff`가 붙는다(MIME 스니핑 기반 저장형 XSS 차단). 관리용 메타 조회(`/api/admin/media/{id}`)와 다르다(6장).
+- **공개 판단 규칙**: 미디어가 **공지·행사·부서 본문, 부서 대표 사진, 부서에 연결된 앨범의 사진, 주보** 중 하나에 쓰이면 공개라서 위처럼 `${NEXT_PUBLIC_API_BASE}/api/media/{id}`만으로 열린다(`Cache-Control: public, max-age=86400`). **설교 본문·갤러리 사진·갤러리 앨범 설명**만 쓰는 미디어는 공개가 아니다. 판단은 요청 시점에 하므로 콘텐츠를 지우거나 연결을 끊으면 바로 바뀐다.
+- **저장 전 에디터 미리보기**: 공지·행사·부서 본문에 막 올려 넣은 이미지는 글을 **저장하기 전에는 공개가 아니다**(아직 어디에도 쓰이지 않아 404). 에디터 미리보기는 `/api/media/{id}`가 아니라 업로드·관리자 미디어 응답의 `url`(`MediaResponse.url`, 서명 주소)로 그려야 한다.
+- **서명 주소**: 비공개 미디어는 서버가 내려주는 서명 주소로만 열린다. 갤러리 앨범 목록의 `thumbnailUrl`, 앨범 상세의 사진별 `url`과 설명 속 `media:{id}`별 `mediaUrls`(`{ "42": "/api/media/42?exp=…&sig=…" }`), 관리자 미디어 응답의 `url`이다. 이 값은 `/api/media/{id}?exp=…&sig=…` 형태이고 **교회 접두사가 없다** — 그대로 `${NEXT_PUBLIC_API_BASE}${url}`로 붙여 쓴다. **1시간**만 유효하니 화면에 오래 두면 목록·상세를 다시 불러 새 주소를 받는다. 앨범 설명의 `media:{id}`는 `mediaUrls`에 있으면 그 값으로, 없으면 `${NEXT_PUBLIC_API_BASE}/api/media/{id}`로 바꾼다.
+- 서명 없이 비공개 미디어를 요청하거나, 서명이 틀리거나 만료됐거나 `exp`·`sig` 중 하나만 있으면 **404 `RESOURCE_NOT_FOUND`**다(403이 아니다). 서버의 `MEDIA_ACCESS_ENFORCED`가 꺼진 전환 기간에는 서명 없는 비공개 요청도 200이지만, 켜지면 막히므로 **갤러리 이미지는 반드시 서명 주소로 옮겨 둔다**. 설교 응답은 서명 주소를 내려주지 않으므로, 설교 본문에만 쓰인 이미지는 차단이 켜지면 열리지 않는다(공지·행사·부서·주보에도 쓰인 이미지는 공개라 열린다). 이는 설교 본문을 회원 전용 콘텐츠로 본 결정에 따른 것이므로, **차단이 켜져 있는 동안 설교 본문에는 이미지를 넣지 않는다**.
+- **`next/image` 주의(권장 사항 — 프론트의 Next.js 버전에서 확인할 것)**: 서명 주소는 쿼리 문자열이 있다. `images.remotePatterns`에 `search`를 지정하지 않으면 쿼리를 모두 허용하는 것으로 알려져 있다. 또 서명이 매번 바뀌므로 이미지 최적화 캐시가 주소마다 따로 쌓일 수 있어, 서명 주소 이미지는 `unoptimized`로 쓰는 편을 권한다. 둘 다 실제 프론트에서 동작을 확인한 뒤 적용한다.
 - **치환 순서**: 마크다운 파싱 후 sanitize까지 끝낸 다음 `media:{id}`를 URL로 바꾸거나, sanitize 단계에서 허용 스킴/도메인을 통제하라. 어느 쪽이든 **새니타이즈는 반드시 거친다.**
 
 ### 5.3 스니펫: `media:{id}` → URL 치환 + DOMPurify 새니타이즈
@@ -330,10 +335,10 @@ function renderMarkdown(raw: string): string {
 |---|---|---|---|
 | 업로드 | `POST /api/admin/media` (`multipart`, 필드 `file`) | `MEDIA_MANAGE` | **201** + 메타 |
 | 목록 | `GET /api/admin/media` | `MEDIA_MANAGE` | 페이지(기본 `size=20`, `createdAt,desc`) |
-| 메타 조회 | `GET /api/admin/media/{id}` | `MEDIA_MANAGE` | 메타(바이트 아님) |
+| 메타 조회 | `GET /api/admin/media/{id}` | `MEDIA_MANAGE` | 메타(바이트 아님) + 미리보기용 서명 주소 `url` |
 | 참조 조회 | `GET /api/admin/media/{id}/references` | `MEDIA_MANAGE` | `{ mediaId, inUse, references[] }` |
 | 삭제 | `DELETE /api/admin/media/{id}` | `MEDIA_MANAGE` | **204** 또는 409 |
-| **공개 서빙** | `GET /api/media/{id}` | **공개** | 파일 바이트 |
+| **서빙** | `GET /api/media/{id}` | JWT 불필요(공개 콘텐츠에 쓰인 것만 공개, 그 외 서명 주소) | 파일 바이트(5.2) |
 
 ### 6.2 업로드 규칙
 
@@ -347,11 +352,17 @@ function renderMarkdown(raw: string): string {
 2. `DELETE` 시 참조가 **1건이라도** 있으면 **`409 MEDIA_IN_USE`** + `references` 동봉. 프론트는 "이 콘텐츠들에서 사용 중" 안내 + 항목(`type`/`title`) 링크 노출, **삭제 버튼은 막고 편집으로 유도**.
 3. 참조가 0이 되면 그때 실제 삭제(파일+레코드).
 
-`references[]`의 `type` 실제 값: `sermon`·`notice`·`event`·`department`·`gallery_album`·`gallery_photo`·`bulletin`. (`gallery_photo`는 소속 앨범의 id·title로 표면화.)
+`references[]`의 `type` 실제 값: `sermon`·`notice`·`event`·`department`·`gallery_album`·`gallery_photo`·`bulletin`. (`gallery_photo`는 소속 앨범의 id·title로 표면화. 부서 대표 사진·부서에 연결된 앨범의 사진도 `department`로 나온다.)
 
 ### 6.4 갤러리·주보 제거 = 연결 해제
 
 앨범에서 사진 제거, 앨범 삭제, 주보 삭제는 **연결 해제(un-link)일 뿐 원본은 라이브러리에 보존**된다. 원본 실제 삭제는 위 차단형 미디어 삭제가 유일한 경로다. soft-deleted 콘텐츠는 참조로 집계되지 않는다.
+
+### 6.5 사진 완전히 내리기
+
+공개 사진을 내리려면 연결을 끊고 라이브러리에서 지운다. ① 부서 대표 사진이면 `PATCH /api/admin/departments/{id}`로 `{ "version": <현재 version>, "heroMediaId": null }`(`version`은 필수), 앨범 사진이면 앨범에서 그 사진을 제거(연결된 앨범을 부서에서 떼려면 `albumId: null`), 본문에 넣었으면 본문에서 지운다. ② `DELETE /api/admin/media/{id}`로 라이브러리에서 삭제한다(참조가 0이라 이제 통과한다). ③ 이후 그 주소는 404다. 다만 이미 받은 브라우저는 `Cache-Control` 때문에 **최대 1일** 그림을 계속 보여 줄 수 있다. 프론트가 `next/image`로 미디어를 내보내면 그 최적화 캐시(`/_next/image?url=…`)가 방금 내린 이미지를 TTL이 끝날 때까지 계속 내줄 수 있으니, 프론트의 Next.js 설정에서 확인한다.
+
+주의: **부서에 앨범을 연결하면 그 앨범의 모든 사진이 공개**가 된다. 회원 전용 갤러리 앨범을 부서에 연결할 때 공개해도 되는 사진인지 확인한다.
 
 ## 7. 작성자 표시 정책
 
@@ -423,15 +434,16 @@ async function saveWithRetry(id: number, edit: (cur: Detail) => UpdateReq) {
 | **sermon** | `preachedAt,desc` | `preacher`·`series`(완전일치)·`from`/`to`·`q`·`tagId` | id·title·preacher·series·scripture·preachedAt·viewCount·tags·author | O(create/update/patch) | 조회 공개, 쓰기 `SERMON_WRITE` | `content` (+videoUrl·audioUrl 외부링크) |
 | **notice** | `isPinned,desc` + `createdAt,desc` | `q`(**제목만**)·`tagId` | id·title·isPinned·viewCount·createdAt·tags·author | O | 조회 공개, 쓰기 `NOTICE_WRITE` | `content` |
 | **event** | `startAt,asc` | `year`+`month` **또는** `startDate`+`endDate`(쌍 필수)·`tagId` | id·title·location·startAt·endAt·allDay·tags (**author·viewCount 없음**) | O(태그만 수정 시 version 불변) | 조회 공개, 쓰기 `EVENT_WRITE` | `description` |
-| **department** | `sortOrder,id`(**비페이징 평배열**) | 없음 | id·name·leader·parentId·sortOrder (**author·tags·viewCount 없음**) | **X**(태그 없음) | 조회 공개, 쓰기 `DEPT_WRITE` | `description` |
+| **department** | `sortOrder,id`(**비페이징 평배열**) | 없음 | id·name·leader·parentId·sortOrder·heroMediaId (**author·tags·viewCount 없음**) | **X**(태그 없음) | 조회 공개, 쓰기 `DEPT_WRITE` | `description` |
 | **main** | 고정(설교3·공지3·일정5) | 없음 | 세 도메인 카드 메타(본문 제외) | — | **공개**(Redis 캐시, 콘텐츠 CUD 시 무효화) | — |
-| **media** | `createdAt,desc`(admin) | `type`·`from`/`to` | 메타 | — | 관리 `MEDIA_MANAGE`, **서빙 `/api/media/{id}` 공개** | — |
-| **gallery** | `createdAt,desc` | `tagId` | id·title·thumbnailMediaId(첫 사진, 없으면 null)·photoCount·createdAt·tags·author | O(앨범, 태그만 수정 시 version 불변) | **`GALLERY_VIEW` 회원전용**, 쓰기 `GALLERY_WRITE` | 앨범 `description` |
-| **bulletin** | `serviceDate,desc` | 없음(OpenAPI 참조) | id·title·serviceDate·mediaId·author | — | **조회 공개**, 쓰기 `BULLETIN_WRITE` | 없음(PDF FK만, `GET /api/media/{mediaId}`로 열람) |
+| **media** | `createdAt,desc`(admin) | `type`·`from`/`to` | 메타 + 서명 주소 `url` | — | 관리 `MEDIA_MANAGE`, **서빙 `/api/media/{id}`는 공개 콘텐츠에 쓰인 것만 공개(5.2)** | — |
+| **gallery** | `createdAt,desc` | `tagId` | id·title·thumbnailMediaId(첫 사진, 없으면 null)·**thumbnailUrl(서명 주소, 없으면 null)**·photoCount·createdAt·tags·author | O(앨범, 태그만 수정 시 version 불변) | **`GALLERY_VIEW` 회원전용**, 쓰기 `GALLERY_WRITE` | 앨범 `description` |
+| **bulletin** | `serviceDate,desc` | 없음(OpenAPI 참조) | id·title·serviceDate·mediaId·author | — | **조회 공개**, 쓰기 `BULLETIN_WRITE` | 없음(PDF FK만, `GET /api/media/{mediaId}`로 열람 — 주보라서 공개) |
 
 도메인 특이 동작 메모:
 - **일정 달력**: 범위 파라미터는 **반드시 쌍**(한쪽만 보내면 400). 둘 다 보내면 year/month 우선. 겹침은 `end_at` 배타 경계, `end_at=null` 점 이벤트는 `start_at` 기준 포함.
 - **부서**: 비페이징 평배열 → 프론트가 `parentId`로 트리 조립. 하위 부서 있으면 삭제 `409 DEPARTMENT_HAS_CHILDREN`. 루트화는 `PUT parentId=null`만(PATCH의 `parentId=null`은 미변경).
+- **부서 사진**: 목록 카드에 `heroMediaId`(대표 사진 mediaId, 없으면 null), 상세에 `heroMediaId`·`albumId`·`photos`(연결 앨범의 사진 mediaId 배열, 앨범 순서)가 더해졌다. 연결 앨범이 삭제됐으면 상세는 `albumId: null`, `photos: []`. 이미지는 `${NEXT_PUBLIC_API_BASE}/api/media/{id}`로 바로 열린다(부서에 쓰였으니 공개). 쓰기(POST·PUT·PATCH): `heroMediaId`·`albumId`는 **칸을 보내지 않으면 유지, `null`이면 비움, 값이면 설정**이다 — PUT에서도 칸을 생략하면 지워지지 않는다. 대표 사진이 없는·이미지가 아닌 미디어이거나 앨범이 없는·삭제된 앨범이면 `400 INVALID_INPUT_VALUE`.
 - **공지 검색**: `q`는 **제목만** 매칭(Swagger 설명은 "제목/내용"이라 적혀 있으나 코드는 제목만 — 소스가 사실).
 - **조회수**: 설교·공지만 존재. 상세 조회 시 +1(부수효과).
 - **갤러리 사진 추가**: `POST .../{id}/photos`(multipart) — `files`(신규 업로드) **와/또는** `mediaIds`(기존 재사용) 혼합 가능. 반환은 갱신된 앨범 상세 전체.

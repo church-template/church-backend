@@ -5,14 +5,19 @@ import com.elipair.church.domain.gallery.dto.GalleryAlbumCreateRequest;
 import com.elipair.church.domain.gallery.dto.GalleryAlbumDetailResponse;
 import com.elipair.church.domain.gallery.dto.GalleryAlbumPatchRequest;
 import com.elipair.church.domain.gallery.dto.GalleryPhotoResponse;
+import com.elipair.church.domain.media.MediaService;
 import com.elipair.church.domain.member.AuthorDisplayService;
 import com.elipair.church.domain.tag.ContentResourceType;
 import com.elipair.church.domain.tag.ContentTagService;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import com.elipair.church.global.tenant.TenantContext;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,22 +33,26 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class GalleryAlbumService {
 
+    private static final Pattern MEDIA_REF = Pattern.compile("media:(\\d{1,18})(?!\\d)");
     private static final ContentResourceType TYPE = ContentResourceType.GALLERY_ALBUM;
 
     private final GalleryAlbumRepository repository;
     private final GalleryPhotoRepository photoRepository;
     private final ContentTagService contentTagService;
     private final AuthorDisplayService authorDisplayService;
+    private final MediaService mediaService;
 
     public GalleryAlbumService(
             GalleryAlbumRepository repository,
             GalleryPhotoRepository photoRepository,
             ContentTagService contentTagService,
-            AuthorDisplayService authorDisplayService) {
+            AuthorDisplayService authorDisplayService,
+            MediaService mediaService) {
         this.repository = repository;
         this.photoRepository = photoRepository;
         this.contentTagService = contentTagService;
         this.authorDisplayService = authorDisplayService;
+        this.mediaService = mediaService;
     }
 
     public Page<GalleryAlbumCardResponse> list(Long tagId, Pageable pageable) {
@@ -64,14 +73,27 @@ public class GalleryAlbumService {
                 : photoRepository.countByAlbumIds(ids).stream()
                         .collect(Collectors.toMap(AlbumPhotoCountRow::getAlbumId, AlbumPhotoCountRow::getCount));
 
-        return page.map(a -> new GalleryAlbumCardResponse(
-                a.getId(),
-                a.getTitle(),
-                thumbMap.get(a.getId()),
-                countMap.getOrDefault(a.getId(), 0L),
-                a.getCreatedAt(),
-                tagsMap.getOrDefault(a.getId(), List.of()),
-                authorMap.getOrDefault(a.getUpdatedBy(), AuthorDisplayService.UNKNOWN)));
+        return page.map(a -> {
+            Long thumbId = thumbMap.get(a.getId());
+            return new GalleryAlbumCardResponse(
+                    a.getId(),
+                    a.getTitle(),
+                    thumbId,
+                    countMap.getOrDefault(a.getId(), 0L),
+                    a.getCreatedAt(),
+                    tagsMap.getOrDefault(a.getId(), List.of()),
+                    authorMap.getOrDefault(a.getUpdatedBy(), AuthorDisplayService.UNKNOWN),
+                    thumbId == null ? null : mediaService.signedUrl(thumbId));
+        });
+    }
+
+    /** 부서 공개 상세용 — 미삭제 앨범의 사진 mediaId를 앨범 순서(sort_order, id)로. 앨범이 없거나 삭제됐으면 empty. */
+    public Optional<List<Long>> findLivePhotoMediaIds(Long albumId) {
+        return repository
+                .findByIdAndDeletedAtIsNull(albumId)
+                .map(a -> photoRepository.findByAlbumIdOrderBySortOrderAscIdAsc(a.getId()).stream()
+                        .map(GalleryPhoto::getMediaId)
+                        .toList());
     }
 
     public GalleryAlbumDetailResponse get(Long id) {
@@ -119,7 +141,12 @@ public class GalleryAlbumService {
 
     private GalleryAlbumDetailResponse detail(GalleryAlbum a) {
         List<GalleryPhotoResponse> photos = photoRepository.findByAlbumIdOrderBySortOrderAscIdAsc(a.getId()).stream()
-                .map(p -> new GalleryPhotoResponse(p.getId(), p.getMediaId(), p.getCaption(), p.getSortOrder()))
+                .map(p -> new GalleryPhotoResponse(
+                        p.getId(),
+                        p.getMediaId(),
+                        p.getCaption(),
+                        p.getSortOrder(),
+                        mediaService.signedUrl(p.getMediaId())))
                 .toList();
         return new GalleryAlbumDetailResponse(
                 a.getId(),
@@ -130,6 +157,19 @@ public class GalleryAlbumService {
                 a.getCreatedAt(),
                 a.getUpdatedAt(),
                 a.getVersion(),
-                photos);
+                photos,
+                mediaService.signedUrls(referencedMediaIds(a.getDescription())));
+    }
+
+    private static List<Long> referencedMediaIds(String description) {
+        if (description == null) {
+            return List.of();
+        }
+        Matcher m = MEDIA_REF.matcher(description);
+        List<Long> ids = new ArrayList<>();
+        while (m.find()) {
+            ids.add(Long.valueOf(m.group(1)));
+        }
+        return ids;
     }
 }

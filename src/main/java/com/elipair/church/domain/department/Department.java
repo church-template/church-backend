@@ -41,6 +41,12 @@ public class Department extends BaseEntity {
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder;
 
+    @Column(name = "hero_media_id")
+    private Long heroMediaId;
+
+    @Column(name = "album_id")
+    private Long albumId;
+
     private Department(String name, String description, String leader, Long parentId, Integer sortOrder) {
         this.name = name;
         this.description = description;
@@ -82,5 +88,15 @@ public class Department extends BaseEntity {
         if (sortOrder != null) {
             this.sortOrder = sortOrder;
         }
+    }
+
+    /** 대표 사진 media id(값 그대로 대입 — null이면 비움). */
+    public void changeHeroMedia(Long heroMediaId) {
+        this.heroMediaId = heroMediaId;
+    }
+
+    /** 연결 앨범 id(값 그대로 대입 — null이면 비움). */
+    public void changeAlbum(Long albumId) {
+        this.albumId = albumId;
     }
 }

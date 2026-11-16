@@ -12,6 +12,8 @@ services:
     # 클라이언트가 IP를 속여 문의·로그인 제한을 우회할 수 있다. !override는 base의 ports를 대체한다(Compose 2.24+).
     ports: !override
       - "127.0.0.1:8080:8080"
+    # 서버 재부팅 뒤 자동으로 다시 뜨게 한다(#90). 없으면 기본값 no라 재부팅하면 사이트가 내려간다.
+    restart: unless-stopped
 
   # 호스트 DB 도구(DBeaver 등)가 SSH 터널로 postgres에 붙기 위한 포트 노출.
   # 127.0.0.1 바인딩이라 퍼블릭 인터페이스에는 뜨지 않는다(외부 접근 불가 — 호스트 로컬/SSH 터널 전용).
@@ -20,3 +22,8 @@ services:
   postgres:
     ports:
       - "127.0.0.1:5432:5432"
+    # restart를 넣거나 바꾸면 다음 배포의 up -d가 postgres·redis를 재생성한다(DB·Redis 몇 초 재시작).
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped

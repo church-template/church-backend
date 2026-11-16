@@ -9,6 +9,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.elipair.church.TestcontainersConfiguration;
+import com.elipair.church.domain.gallery.GalleryAlbum;
+import com.elipair.church.domain.gallery.GalleryAlbumRepository;
+import com.elipair.church.domain.gallery.GalleryPhoto;
+import com.elipair.church.domain.gallery.GalleryPhotoRepository;
+import com.elipair.church.domain.media.Media;
+import com.elipair.church.domain.media.MediaRepository;
 import com.elipair.church.domain.member.Member;
 import com.elipair.church.domain.member.MemberRepository;
 import com.elipair.church.global.security.JwtTokenProvider;
@@ -43,6 +49,15 @@ class DepartmentApiTest {
     @Autowired
     private MemberRepository memberRepository;
 
+    @Autowired
+    private MediaRepository mediaRepository;
+
+    @Autowired
+    private GalleryAlbumRepository albumRepository;
+
+    @Autowired
+    private GalleryPhotoRepository photoRepository;
+
     private Long authorId;
 
     @BeforeEach
@@ -56,6 +71,9 @@ class DepartmentApiTest {
     void cleanup() {
         // 자기참조 parent_id FK: 단건 delete는 부모-자식 순서 위반 → 단일 statement bulk delete로 회피
         departmentRepository.deleteAllInBatch();
+        photoRepository.deleteAllInBatch();
+        albumRepository.deleteAllInBatch();
+        mediaRepository.deleteAllInBatch();
         memberRepository.deleteAll(memberRepository.findAll());
     }
 
@@ -356,5 +374,185 @@ class DepartmentApiTest {
         mockMvc.perform(delete("/api/admin/departments/" + id).header("Authorization", adminToken()))
                 .andExpect(status().isNoContent());
         mockMvc.perform(get("/api/departments/" + id)).andExpect(status().isNotFound());
+    }
+
+    // ---- 대표 사진·앨범 (#92) ----
+
+    private long seedMedia(String mime) {
+        return mediaRepository
+                .save(Media.create("f", "k/" + System.nanoTime() + mime.hashCode(), mime, 10L, authorId))
+                .getId();
+    }
+
+    private long seedAlbum() {
+        return albumRepository.save(GalleryAlbum.create("앨범", null)).getId();
+    }
+
+    private void addPhoto(long albumId, long mediaId, int sortOrder) {
+        photoRepository.save(GalleryPhoto.create(albumId, mediaId, sortOrder));
+    }
+
+    private long createWith(String extra) throws Exception {
+        String json = mockMvc.perform(post("/api/admin/departments")
+                        .header("Authorization", adminToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"부서\"" + extra + "}"))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        return ((Number) JsonPath.read(json, "$.id")).longValue();
+    }
+
+    private org.springframework.test.web.servlet.ResultActions send(
+            org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder method, String json)
+            throws Exception {
+        return mockMvc.perform(method.header("Authorization", adminToken())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json));
+    }
+
+    @Test
+    void 대표_사진과_앨범을_생성시_연결한다() throws Exception {
+        long media = seedMedia("image/jpeg");
+        long album = seedAlbum();
+
+        long id = createWith(",\"heroMediaId\":" + media + ",\"albumId\":" + album);
+
+        mockMvc.perform(get("/api/departments/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.heroMediaId").value((int) media))
+                .andExpect(jsonPath("$.albumId").value((int) album));
+    }
+
+    @Test
+    void 새_칸을_보내지_않은_PUT은_연결을_유지한다() throws Exception {
+        long media = seedMedia("image/jpeg");
+        long album = seedAlbum();
+        long id = createWith(",\"heroMediaId\":" + media + ",\"albumId\":" + album);
+
+        send(put("/api/admin/departments/" + id), "{\"name\":\"새이름\",\"version\":0}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("새이름"))
+                .andExpect(jsonPath("$.heroMediaId").value((int) media))
+                .andExpect(jsonPath("$.albumId").value((int) album));
+    }
+
+    @Test
+    void null을_보낸_PUT과_PATCH는_연결을_비운다() throws Exception {
+        long media = seedMedia("image/jpeg");
+        long album = seedAlbum();
+        long id = createWith(",\"heroMediaId\":" + media + ",\"albumId\":" + album);
+
+        send(put("/api/admin/departments/" + id), "{\"name\":\"부서\",\"version\":0,\"heroMediaId\":null}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.heroMediaId").doesNotExist())
+                .andExpect(jsonPath("$.albumId").value((int) album));
+
+        send(patch("/api/admin/departments/" + id), "{\"albumId\":null,\"version\":1}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.albumId").doesNotExist())
+                .andExpect(jsonPath("$.photos").isEmpty());
+    }
+
+    @Test
+    void PATCH로_대표_사진만_바꾼다() throws Exception {
+        long first = seedMedia("image/jpeg");
+        long second = seedMedia("image/png");
+        long album = seedAlbum();
+        long id = createWith(",\"heroMediaId\":" + first + ",\"albumId\":" + album);
+
+        send(patch("/api/admin/departments/" + id), "{\"heroMediaId\":" + second + ",\"version\":0}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.heroMediaId").value((int) second))
+                .andExpect(jsonPath("$.albumId").value((int) album));
+    }
+
+    @Test
+    void 이미지가_아닌_대표_사진은_400() throws Exception {
+        long pdf = seedMedia("application/pdf");
+
+        send(post("/api/admin/departments"), "{\"name\":\"부서\",\"heroMediaId\":" + pdf + "}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void 없는_미디어_id의_대표_사진은_400() throws Exception {
+        send(post("/api/admin/departments"), "{\"name\":\"부서\",\"heroMediaId\":999999}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void 숫자가_아닌_heroMediaId는_400() throws Exception {
+        long id = createWith("");
+
+        send(patch("/api/admin/departments/" + id), "{\"heroMediaId\":\"abc\",\"version\":0}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void 없거나_삭제된_앨범_연결은_400() throws Exception {
+        send(post("/api/admin/departments"), "{\"name\":\"부서\",\"albumId\":999999}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+
+        GalleryAlbum deleted = GalleryAlbum.create("삭제", null);
+        deleted.softDelete();
+        long deletedId = albumRepository.save(deleted).getId();
+        send(post("/api/admin/departments"), "{\"name\":\"부서\",\"albumId\":" + deletedId + "}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT_VALUE"));
+    }
+
+    @Test
+    void 공개_상세는_앨범_사진을_앨범_순서로_준다() throws Exception {
+        long album = seedAlbum();
+        long m0 = seedMedia("image/jpeg");
+        long m1 = seedMedia("image/jpeg");
+        long m2 = seedMedia("image/jpeg");
+        addPhoto(album, m2, 2);
+        addPhoto(album, m0, 0);
+        addPhoto(album, m1, 1);
+        long id = createWith(",\"albumId\":" + album);
+
+        mockMvc.perform(get("/api/departments/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.photos[0]").value((int) m0))
+                .andExpect(jsonPath("$.photos[1]").value((int) m1))
+                .andExpect(jsonPath("$.photos[2]").value((int) m2))
+                .andExpect(jsonPath("$.photos.length()").value(3));
+    }
+
+    @Test
+    void 공개_목록에_대표_사진_id가_있다() throws Exception {
+        long media = seedMedia("image/jpeg");
+        createWith(",\"heroMediaId\":" + media);
+
+        mockMvc.perform(get("/api/departments"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].heroMediaId").value((int) media));
+    }
+
+    @Test
+    void 연결_앨범이_삭제되면_albumId_null_photos_빈배열() throws Exception {
+        long album = seedAlbum();
+        addPhoto(album, seedMedia("image/jpeg"), 0);
+        long id = createWith(",\"albumId\":" + album);
+        GalleryAlbum a = albumRepository.findById(album).orElseThrow();
+        a.softDelete();
+        albumRepository.save(a);
+
+        mockMvc.perform(get("/api/departments/" + id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.albumId").doesNotExist())
+                .andExpect(jsonPath("$.photos").isEmpty());
+    }
+
+    @Test
+    void 회원전용_앨범_경로는_여전히_익명_차단() throws Exception {
+        mockMvc.perform(get("/api/gallery/albums/" + seedAlbum())).andExpect(status().isUnauthorized());
     }
 }

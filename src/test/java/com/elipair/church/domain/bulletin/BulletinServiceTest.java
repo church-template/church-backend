@@ -57,7 +57,7 @@ class BulletinServiceTest {
     }
 
     private MediaResponse pdfMedia(long id) {
-        return new MediaResponse(id, "b.pdf", "application/pdf", 1L, 1L, null);
+        return new MediaResponse(id, "b.pdf", "application/pdf", 1L, 1L, null, null);
     }
 
     // ---- create ----

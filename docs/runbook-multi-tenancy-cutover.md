@@ -36,7 +36,7 @@ DBN=$(grep '^DB_NAME=' .env | cut -d= -f2-); DBN=${DBN:-church_db}
 | 1차 배포 (§2) | backend 정지 → 백업 → `.env` → 배포 PR | 10분 안팎 | 이전 이미지 재배포 (§4) |
 | 자동 백업 등록 (§5) | cron에 `backup.sh` | 없음 | — |
 | 프론트 전환 (§6) | 은샘 프론트의 API 주소에 `/church/<slug>` 추가 | 없음 | 프론트 환경변수 원복 |
-| 2차 배포 (§7) | `TENANT_DEFAULT_SLUG` 제거 + V20 | 수십 초 | 1차 이미지 재배포 (§7-4) |
+| 2차 배포 (§7) | `TENANT_DEFAULT_SLUG` 제거 + V21 | 수십 초 | 1차 이미지 재배포 (§7-4) |
 | 두 번째 교회 (§8) | `new-church.sh` | 없음 | — |
 
 **배포는 자동이고 멈출 지점이 없다.** `main → deploy` PR을 열면 워크플로가 스스로 머지하고, 7~10분 뒤 서버에
@@ -333,7 +333,7 @@ docker logs --since 168h church-backend-backend-1 2>&1 | grep -c '기본 교회�
 
 ### 7-3. 배포
 
-1. V20(`church_id` 기본값 제거)이 담긴 버전이 `main`에 있는지 확인한다.
+1. V21(`church_id` 기본값 제거)이 담긴 버전이 `main`에 있는지 확인한다.
 2. 서버 `.env`에서 `TENANT_DEFAULT_SLUG` 줄을 지운다.
 3. 배포 PR을 연다.
 4. 확인:

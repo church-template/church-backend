@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.elipair.church.domain.gallery.dto.GalleryAlbumCreateRequest;
 import com.elipair.church.domain.gallery.dto.GalleryAlbumPatchRequest;
+import com.elipair.church.domain.media.MediaService;
 import com.elipair.church.domain.member.AuthorDisplayService;
 import com.elipair.church.domain.tag.ContentResourceType;
 import com.elipair.church.domain.tag.ContentTagService;
@@ -34,7 +35,8 @@ class GalleryAlbumServiceTest {
         photoRepository = mock(GalleryPhotoRepository.class);
         contentTagService = mock(ContentTagService.class);
         authorDisplayService = mock(AuthorDisplayService.class);
-        service = new GalleryAlbumService(repository, photoRepository, contentTagService, authorDisplayService);
+        service = new GalleryAlbumService(
+                repository, photoRepository, contentTagService, authorDisplayService, mock(MediaService.class));
         when(contentTagService.getTags(any(), any())).thenReturn(List.of());
         when(authorDisplayService.displayName(any())).thenReturn("관리자");
         when(photoRepository.findByAlbumIdOrderBySortOrderAscIdAsc(any())).thenReturn(List.of());

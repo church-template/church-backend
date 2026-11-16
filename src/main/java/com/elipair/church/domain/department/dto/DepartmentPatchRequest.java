@@ -5,7 +5,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 /**
- * 부서 부분 수정(PATCH). 전달된(비-null) 필드만 적용. parentId=null·sortOrder=null은 미변경(루트화는 PUT). version 필수.
+ * 부서 부분 수정(PATCH). 전달된(비-null) 필드만 적용. parentId=null·sortOrder=null은 미변경(루트화는 PUT). version 필수. heroMediaId·albumId: 칸 없음=유지, null=비움, 숫자=설정.
  */
 public record DepartmentPatchRequest(
         @Size(max = 100) String name,
@@ -13,4 +13,6 @@ public record DepartmentPatchRequest(
         @Size(max = 100) String leader,
         Long parentId,
         @PositiveOrZero Integer sortOrder,
-        @NotNull Long version) {}
+        @NotNull Long version,
+        IdChange heroMediaId,
+        IdChange albumId) {}

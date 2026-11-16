@@ -284,8 +284,8 @@ USER         priority 0     is_system true   (가입 시 자동 부여, 갤러�
 - 서버 저장 시에도 최소 검증(길이 제한 등)은 두되, 마크다운 원본의 순수성을 위해 HTML 새니타이즈는 프론트 렌더 단계에서 수행한다.
 - 목록 조회는 본문(`content`)을 제외하고 카드용 메타데이터(제목·태그·조회수·작성일·작성자 등)만 내린다. 별도 요약(summary) 필드는 두지 않으며, 상세 조회에서만 `content`를 반환한다.
 - **본문 내 이미지는 전체 URL이 아니라 미디어 id로 참조**한다. 표준 `![](url)` 대신 `![](media:{id})` 형태(예: `![설명](media:42)`)로 저장한다. 본문에 도메인이 박히지 않으므로 교회마다 도메인이 달라도(템플릿) 본문 데이터는 불변이다.
-- 프론트는 렌더 직전 `media:{id}`를 실제 접근 URL(`${NEXT_PUBLIC_API_BASE}/api/media/{id}` — 이 베이스에 이미 교회 접두사 `/church/<slug>`가 들어 있으므로 접두사를 다시 붙이지 않는다)로 치환한 뒤 새니타이즈하여 표시한다. 이 치환은 기존 마크다운 렌더·새니타이즈 파이프라인에 정규식 한 단계로 흡수된다.
-- **설계 노트(트레이드오프):** 미디어-콘텐츠 관계는 별도 연결 테이블이 아니라 본문 텍스트 내부의 `media:{id}` 문자열로 표현된다. 즉 이 관계는 정규화된 행이 아니라 비정규화된 텍스트 안에 존재한다. 이는 마크다운 본문 어느 위치에나 이미지를 자유롭게 삽입하기 위한 의도된 선택이며(노션·깃허브 등 마크다운 CMS의 공통 방식), 그 대가로 참조 추적은 LIKE 검색에 의존한다(아래 미디어 라이브러리 참조).
+- 프론트는 렌더 직전 `media:{id}`를 실제 접근 URL(`${NEXT_PUBLIC_API_BASE}/api/media/{id}` — 이 베이스에 이미 교회 접두사 `/church/<slug>`가 들어 있으므로 접두사를 다시 붙이지 않는다)로 치환한 뒤 새니타이즈하여 표시한다. 이 치환은 기존 마크다운 렌더·새니타이즈 파이프라인에 정규식 한 단계로 흡수된다. 공개 콘텐츠(공지·행사·부서·주보)에 쓰인 미디어만 이 주소로 익명에게 열리고, 그 외는 응답이 내려주는 서명 주소를 쓴다(§5.10 파일 서빙 접근 규칙).
+- **설계 노트(트레이드오프):** 미디어-콘텐츠 관계는 별도 연결 테이블이 아니라 본문 텍스트 내부의 `media:{id}` 문자열로 표현된다. 즉 이 관계는 정규화된 행이 아니라 비정규화된 텍스트 안에 존재한다. 이는 마크다운 본문 어느 위치에나 이미지를 자유롭게 삽입하기 위한 의도된 선택이며(노션·깃허브 등 마크다운 CMS의 공통 방식), 그 대가로 참조 추적은 본문 텍스트 검색(숫자 경계를 지키는 정규식)에 의존한다(아래 미디어 라이브러리 참조).
 
 ### 5.1 인증 (Auth)
 | 메서드 | 경로 | 권한 | 설명 |
@@ -431,7 +431,11 @@ POST /api/auth/login
 | PATCH | /api/admin/departments/{id} | DEPT_WRITE | 부분 수정 |
 | DELETE | /api/admin/departments/{id} | DEPT_WRITE | 삭제 |
 
-부서 필드(권장): name, description(**마크다운 TEXT**, 부서 소개·활동), leader(담당 교역자), parent_id(자기참조 FK, 계층 표현, nullable), sort_order, created_at, deleted_at. 기본 정렬: `sort_order ASC`(관리자 지정 순서).
+부서 필드(권장): name, description(**마크다운 TEXT**, 부서 소개·활동), leader(담당 교역자), parent_id(자기참조 FK, 계층 표현, nullable), sort_order, hero_media_id(대표 사진, FK → media, nullable, `ON DELETE SET NULL`), album_id(연결 앨범, FK → gallery_albums, nullable), created_at, deleted_at. 기본 정렬: `sort_order ASC`(관리자 지정 순서).
+
+- **사진 칸 응답**: 목록 카드와 상세에 `heroMediaId`, 상세에 `albumId`와 `photos`(연결 앨범의 사진 mediaId 배열, 앨범 순서)가 내려간다. 연결 앨범이 삭제됐으면 상세는 `albumId: null`, `photos: []`다. 두 칸 모두 없으면 `null`/빈 배열이라 기존 응답에 필드만 추가된다.
+- **쓰기 규칙**: POST·PUT·PATCH의 `heroMediaId`·`albumId`는 **보내지 않으면 유지, `null`이면 비움, 값이면 설정**이다(POST는 없음=연결 안 함). 대표 사진이 존재하지 않거나 이미지가 아닌 미디어이거나, 앨범이 없거나 삭제됐으면 `400 INVALID_INPUT_VALUE`다.
+- 부서에 앨범을 연결하면 그 앨범의 사진은 모두 공개 미디어가 된다(아래 파일 서빙 규칙).
 
 ### 5.9 공통 (Common)
 | 메서드 | 경로 | 권한 | 설명 |
@@ -453,7 +457,15 @@ POST /api/auth/login
 | GET | /api/admin/media/{id} | MEDIA_MANAGE | 미디어 단건 정보 |
 | GET | /api/admin/media/{id}/references | MEDIA_MANAGE | 이 미디어를 참조하는 글 목록 반환 |
 | DELETE | /api/admin/media/{id} | MEDIA_MANAGE | 삭제 (참조 있으면 차단) |
-| GET | /api/media/{id} | 공개 | 실제 파일 접근(서빙/다운로드) — 본문 이미지 렌더·PDF 열람용 |
+| GET | /api/media/{id} | 공개 콘텐츠에 쓰인 것만 공개, 그 외 서명 주소 | 실제 파일 접근(서빙/다운로드) — 본문 이미지 렌더·PDF 열람용 |
+
+**파일 서빙 접근 규칙 (`GET /api/media/{id}`)** — JWT는 필요 없지만, 미디어는 **공개 콘텐츠에 쓰인 것만** 익명에게 열린다.
+- **공개 근거**: 공지·행사·부서 본문, 부서 대표 사진(`hero_media_id`), 부서에 연결된 앨범의 사진, 주보. **설교 본문·갤러리 사진·갤러리 앨범 설명은 공개 근거가 아니다**(갤러리는 회원 전용이고 설교 열람도 회원 전용이라 같은 이미지가 익명에게 새면 안 된다). 판단은 요청 시점에 참조를 다시 계산한다(콘텐츠를 지우거나 연결을 끊으면 바로 반영).
+- **서명 없는 요청**: 공개 미디어는 파일 + `Cache-Control: public, max-age=86400`. 공개 근거가 없으면 `404 RESOURCE_NOT_FOUND`(403이 아니다 — 존재 여부를 드러내지 않는다). 단 `MEDIA_ACCESS_ENFORCED=false`(기본)이면 비공개도 200이되 `Cache-Control: private, max-age=86400`이다(전환 기간).
+- **서명 요청**: `/api/media/{id}?exp={epoch초}&sig={base64url}`. 유효하면 공개 근거와 무관하게 파일 + `private, max-age=<남은 초>`. 서명이 틀리거나 만료됐거나 `exp`·`sig` 중 하나만 있으면 404.
+- **서명 주소 발급**: 갤러리 앨범 목록의 `thumbnailUrl`, 앨범 상세의 사진별 `url`과 설명 속 `media:{id}`별 `mediaUrls`, 관리자 미디어 응답(`/api/admin/media`)의 `url`이 내려준다. 경로는 **교회 접두사 없이** `/api/media/...`로 오며 프론트가 `${NEXT_PUBLIC_API_BASE}${url}`로 조립한다. 유효 시간은 1시간.
+- **서명**: HMAC-SHA256, 입력 `churchId:mediaId:exp`, 키는 `JWT_SECRET`에서 파생(`HMAC-SHA256(secret, "media-url")`). 교회 id가 입력에 들어가므로 다른 교회에서는 검증되지 않는다.
+- 응답에는 항상 `X-Content-Type-Options: nosniff`, `Content-Disposition: inline`이 붙는다.
 
 **media 테이블**
 | 컬럼 | 타입 | 비고 |
@@ -466,27 +478,35 @@ POST /api/auth/login
 | uploaded_by | BIGINT FK → members | 업로더 |
 | created_at | TIMESTAMP | |
 
-**참조 추적 (본문 LIKE + 갤러리 FK):**
+**참조 추적 (본문 정규식 + 갤러리 FK):**
 - 별도 참조 연결 테이블을 두지 않는다. 본문 텍스트의 `media:{id}`와 갤러리의 FK가 곧 진실이다.
-- 본문 필드(설교·공지·이벤트·부서·갤러리 앨범 description)는 `media:{id}` 문자열을 LIKE로 검색하고, 갤러리 사진은 `gallery_photos.media_id` FK를 정확히(`=`) 매칭한다. 둘을 합친 결과가 참조 목록이다.
+- 본문 필드(설교·공지·이벤트·부서·갤러리 앨범 description)는 `media:{id}` 문자열을 PostgreSQL 정규식 `~ 'media:{id}($|[^0-9])'`로 검색하고(뒤에 숫자가 오면 매칭하지 않아 `media:42`가 `media:420`·`media:421`에 걸리지 않는다. 공개 판단에 쓰이므로 단순 `LIKE '%media:{id}%'`로 바꾸면 안 된다), 갤러리 사진은 `gallery_photos.media_id` FK를 정확히(`=`) 매칭한다. 둘을 합친 결과가 참조 목록이다.
 ```sql
-SELECT 'sermon' AS type, id, title FROM sermons        WHERE content     LIKE '%media:42%' AND deleted_at IS NULL
+SELECT 'sermon' AS type, id, title FROM sermons        WHERE content     ~ 'media:42($|[^0-9])' AND deleted_at IS NULL
 UNION ALL
-SELECT 'notice',      id, title FROM notices            WHERE content     LIKE '%media:42%' AND deleted_at IS NULL
+SELECT 'notice',      id, title FROM notices            WHERE content     ~ 'media:42($|[^0-9])' AND deleted_at IS NULL
 UNION ALL
-SELECT 'event',       id, title FROM events             WHERE description LIKE '%media:42%' AND deleted_at IS NULL
+SELECT 'event',       id, title FROM events             WHERE description ~ 'media:42($|[^0-9])' AND deleted_at IS NULL
 UNION ALL
-SELECT 'department',  id, name  FROM departments        WHERE description LIKE '%media:42%' AND deleted_at IS NULL
+SELECT 'department',  id, name  FROM departments        WHERE description ~ 'media:42($|[^0-9])' AND deleted_at IS NULL
 UNION ALL
-SELECT 'gallery_album', id, title FROM gallery_albums   WHERE description LIKE '%media:42%' AND deleted_at IS NULL
+SELECT 'gallery_album', id, title FROM gallery_albums   WHERE description ~ 'media:42($|[^0-9])' AND deleted_at IS NULL
 UNION ALL
 SELECT 'gallery_photo', a.id, a.title FROM gallery_photos p
                                                JOIN gallery_albums a ON a.id = p.album_id
 WHERE p.media_id = 42 AND a.deleted_at IS NULL
 UNION ALL
-SELECT 'bulletin', id, title FROM bulletins WHERE media_id = 42 AND deleted_at IS NULL;
+SELECT 'bulletin', id, title FROM bulletins WHERE media_id = 42 AND deleted_at IS NULL
+UNION ALL
+SELECT 'department', id, name FROM departments WHERE hero_media_id = 42 AND deleted_at IS NULL
+UNION ALL
+SELECT 'department', d.id, d.name FROM departments d
+                                         JOIN gallery_photos p ON p.album_id = d.album_id
+                                         JOIN gallery_albums a ON a.id = p.album_id
+WHERE p.media_id = 42 AND d.deleted_at IS NULL AND a.deleted_at IS NULL;
 ```
-- 본문 LIKE는 교회 규모(글 수백 개)에서 문제없고, 갤러리 FK 매칭은 인덱스로 즉시 처리된다. 향후 글 폭증 시 본문에 `pg_trgm` 인덱스 추가(코드 불변).
+- 마지막 두 갈래는 부서 대표 사진과 부서에 연결된 앨범의 사진이다(`type`은 `department`). 이 참조가 있는 미디어는 공개 서빙 대상이고 삭제도 막힌다.
+- 본문 정규식 검색은 교회 규모(글 수백 개)에서 문제없고, 갤러리 FK 매칭은 인덱스로 즉시 처리된다. 향후 글 폭증 시 본문에 `pg_trgm` 인덱스 추가(코드 불변).
 
 **삭제 정책 (차단형):**
 - 본문(`media:{id}`)이든 갤러리(`gallery_photos.media_id`)든 참조가 하나라도 있으면 삭제를 거부하고 **409 Conflict + 참조 목록**을 반환한다. 쓰고 있는 사진이 사라져 본문·갤러리가 깨지는 상태를 원천 차단한다.
@@ -686,7 +706,7 @@ soft delete를 전제로 하므로 **모든 목록 조회 인덱스는 `WHERE de
 | inquiries | `(created_at DESC) WHERE deleted_at IS NULL` | 문의 목록 |
 | inquiries | `(created_at DESC) WHERE deleted_at IS NULL AND completed_at IS NULL` | 미처리 문의 목록(관리자 기본 화면) |
 
-**미디어 참조 검색의 성능 한계 (중요):** 본문 참조 추적의 `LIKE '%media:{id}%'`는 **앞 와일드카드 때문에 B-tree 인덱스를 타지 못하고 풀스캔**한다. 교회 규모(도메인별 글 수백 개)에서는 5개 테이블 UNION 풀스캔도 체감 지연이 없어 수용한다. 글이 수만 건으로 늘면 본문 컬럼에 **`pg_trgm` GIN 인덱스**를 추가해 LIKE를 가속한다(스키마·코드 변경 없이 인덱스만 추가). 갤러리·주보의 `media_id` FK 검색은 일반 인덱스로 즉시 처리된다.
+**미디어 참조 검색의 성능 한계 (중요):** 본문 참조 추적의 정규식 `~ 'media:{id}($|[^0-9])'`은 **B-tree 인덱스를 타지 못하고 풀스캔**한다. 교회 규모(도메인별 글 수백 개)에서는 5개 테이블 UNION 풀스캔도 체감 지연이 없어 수용한다. 글이 수만 건으로 늘면 본문 컬럼에 **`pg_trgm` GIN 인덱스**를 추가해 정규식 검색을 가속한다(스키마·코드 변경 없이 인덱스만 추가). 갤러리·주보의 `media_id` FK 검색은 일반 인덱스로 즉시 처리된다.
 
 ---
 
@@ -734,7 +754,7 @@ com.elipair.church
 - 업로드 파일은 **로컬 디스크**에 저장하고, 그 디렉터리(`FILE_UPLOAD_DIR`, 예: `/app/uploads`)를 **Docker named volume에 마운트**한다. 컨테이너를 지워도 volume이 살아있으면 파일은 보존된다.
 - 저장 로직은 `FileStorage` **인터페이스로 추상화**하고, 1차 구현은 `LocalFileStorage`로 한다. 향후 교회가 커져 OCI Object Storage나 S3로 옮길 경우 구현체만 교체하면 되도록 설계한다.
 - 저장 키는 `churches/{churchId}/yyyy/MM/{uuid}.ext`다(`media.stored_path`, 불투명 키). 멀티테넌시 전환 전에 올린 파일은 옛 키(`yyyy/MM/…`)를 그대로 쓴다. 키가 곧 객체 키라 S3로 옮길 때 DB 값을 바꾸지 않는다.
-- 파일 접근 URL은 프론트가 `<API 베이스>/church/<slug>/api/media/{id}`로 조립한다. 본문은 `media:{id}`만 저장하므로 URL 베이스가 교회마다 달라도 본문은 불변. `FILE_BASE_URL`은 바인딩만 되고 읽는 코드가 없는 죽은 설정이다.
+- 파일 접근 URL은 프론트가 `<API 베이스>/church/<slug>/api/media/{id}`로 조립한다(공개 미디어. 비공개 미디어는 응답이 내려주는 서명 주소 `${NEXT_PUBLIC_API_BASE}${url}` — §5.10). 본문은 `media:{id}`만 저장하므로 URL 베이스가 교회마다 달라도 본문은 불변. `FILE_BASE_URL`은 바인딩만 되고 읽는 코드가 없는 죽은 설정이다.
 - 업로드 최대 크기는 운영자가 `FILE_MAX_SIZE`(바이트, 기본 10MB=10485760)로 설정한다. 코드에 박힌 고정값이 아니라 `.env`로 조정하는 값(전 교회 공용)이며, 이 한도를 **초과하면 업로드를 거부**(`413 FILE_SIZE_EXCEEDED`)할 뿐 서버가 이미지를 리사이즈·압축하지는 않는다(렌더·가공은 프론트 몫). 검증은 `FileStorage` 저장 시점에서 수행한다.
 - OCI 배포 시: 업로드 volume을 OCI **Block Volume**에 연결하고 스냅샷 백업을 켤 것(권장). 단일 Compute 인스턴스 + docker compose 구성을 전제로 한다(다중 노드/OKE로 가면 공유 스토리지 필요).
 

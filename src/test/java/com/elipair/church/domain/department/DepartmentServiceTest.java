@@ -46,7 +46,8 @@ class DepartmentServiceTest {
         when(repository.findMaxSortOrder()).thenReturn(Optional.empty());
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        DepartmentDetailResponse res = service.create(new DepartmentCreateRequest("예배부", "본문", "김목사", null, null, null, null));
+        DepartmentDetailResponse res =
+                service.create(new DepartmentCreateRequest("예배부", "본문", "김목사", null, null, null, null));
 
         assertThat(res.sortOrder()).isEqualTo(10); // 빈 테이블 → 10
         assertThat(res.parentId()).isNull();
@@ -60,7 +61,8 @@ class DepartmentServiceTest {
         when(repository.findMaxSortOrder()).thenReturn(Optional.of(20));
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        DepartmentDetailResponse res = service.create(new DepartmentCreateRequest("성가대", "본문", "이집사", 5L, null, null, null));
+        DepartmentDetailResponse res =
+                service.create(new DepartmentCreateRequest("성가대", "본문", "이집사", 5L, null, null, null));
 
         assertThat(res.sortOrder()).isEqualTo(30); // 20 + 10
         assertThat(res.parentId()).isEqualTo(5L);
@@ -71,7 +73,8 @@ class DepartmentServiceTest {
     void create_with_explicit_sort_order_skips_append() {
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        DepartmentDetailResponse res = service.create(new DepartmentCreateRequest("부서", "본문", "목사", null, 99, null, null));
+        DepartmentDetailResponse res =
+                service.create(new DepartmentCreateRequest("부서", "본문", "목사", null, 99, null, null));
 
         assertThat(res.sortOrder()).isEqualTo(99);
         verify(repository, never()).findMaxSortOrder(); // 명시값이라 append 조회 안 함

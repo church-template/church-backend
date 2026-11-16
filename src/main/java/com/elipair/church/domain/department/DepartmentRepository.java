@@ -26,13 +26,12 @@ public interface DepartmentRepository extends JpaRepository<Department, Long> {
      * 대표 사진(hero_media_id), 연결 앨범(미삭제)의 사진.
      */
     @Query(
-            value =
-                    "select distinct d.id as id, d.name as title from departments d "
-                            + "where d.church_id = :churchId and d.deleted_at is null and ("
-                            + "d.description ~ :pattern or d.hero_media_id = :mediaId or exists ("
-                            + "select 1 from gallery_photos p join gallery_albums a on a.id = p.album_id "
-                            + "where p.album_id = d.album_id and p.media_id = :mediaId "
-                            + "and a.deleted_at is null and p.church_id = :churchId and a.church_id = :churchId))",
+            value = "select distinct d.id as id, d.name as title from departments d "
+                    + "where d.church_id = :churchId and d.deleted_at is null and ("
+                    + "d.description ~ :pattern or d.hero_media_id = :mediaId or exists ("
+                    + "select 1 from gallery_photos p join gallery_albums a on a.id = p.album_id "
+                    + "where p.album_id = d.album_id and p.media_id = :mediaId "
+                    + "and a.deleted_at is null and p.church_id = :churchId and a.church_id = :churchId))",
             nativeQuery = true)
     List<DepartmentRefRow> findReferencesByMedia(
             @Param("pattern") String pattern, @Param("mediaId") long mediaId, @Param("churchId") long churchId);

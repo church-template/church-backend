@@ -100,16 +100,14 @@ class DepartmentReferenceProviderTest {
     void 대표_사진으로_쓰면_부서_참조로_잡힌다() {
         Department d = saved("대표", "그림 없음", 5L, null);
 
-        assertThat(provider.findReferences(5))
-                .containsExactly(new ContentRef("department", d.getId(), "대표"));
+        assertThat(provider.findReferences(5)).containsExactly(new ContentRef("department", d.getId(), "대표"));
     }
 
     @Test
     void 연결_앨범의_사진도_부서_참조로_잡힌다() {
         Department d = saved("앨범부서", "그림 없음", null, albumWithPhoto(6L, false));
 
-        assertThat(provider.findReferences(6))
-                .containsExactly(new ContentRef("department", d.getId(), "앨범부서"));
+        assertThat(provider.findReferences(6)).containsExactly(new ContentRef("department", d.getId(), "앨범부서"));
     }
 
     @Test

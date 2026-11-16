@@ -186,7 +186,9 @@ public class DepartmentService {
 
     private DepartmentDetailResponse detail(Department d) {
         Long albumId = d.getAlbumId();
-        List<Long> photos = albumId == null ? null : albumService.findLivePhotoMediaIds(albumId).orElse(null);
+        List<Long> photos = albumId == null
+                ? null
+                : albumService.findLivePhotoMediaIds(albumId).orElse(null);
         if (photos == null) { // 연결 앨범이 없거나 삭제됨
             albumId = null;
             photos = List.of();

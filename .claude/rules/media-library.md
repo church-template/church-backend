@@ -11,10 +11,10 @@ Upload-then-reference model (like GitHub attachments / Google asset library). Se
 
 Bodies embed the literal string `media:{id}` (see [[api-conventions]]); there is **no** content↔media join table. The truth about "what uses media N" is:
 
-- body fields (sermon/notice/event/department/gallery-album description) matched by `LIKE '%media:{id}%'`, **plus**
+- body fields (sermon/notice/event/department/gallery-album description) matched by the PostgreSQL regex `~ 'media:{id}($|[^0-9])'` (digit-boundary safe: `media:42` must not match `media:420`; a plain `LIKE '%media:{id}%'` would, and since references now decide public access that would leak private media), **plus**
 - `gallery_photos.media_id` and `bulletins.media_id` matched by `=`.
 
-Union of both = the reference list. This is intentional (free image placement anywhere in markdown); the cost is LIKE-based tracking.
+Union of both = the reference list. This is intentional (free image placement anywhere in markdown); the cost is text-search (regex) based tracking.
 
 ## Serving: public only if used by public content, else signed URL
 

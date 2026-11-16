@@ -285,7 +285,7 @@ USER         priority 0     is_system true   (가입 시 자동 부여, 갤러�
 - 목록 조회는 본문(`content`)을 제외하고 카드용 메타데이터(제목·태그·조회수·작성일·작성자 등)만 내린다. 별도 요약(summary) 필드는 두지 않으며, 상세 조회에서만 `content`를 반환한다.
 - **본문 내 이미지는 전체 URL이 아니라 미디어 id로 참조**한다. 표준 `![](url)` 대신 `![](media:{id})` 형태(예: `![설명](media:42)`)로 저장한다. 본문에 도메인이 박히지 않으므로 교회마다 도메인이 달라도(템플릿) 본문 데이터는 불변이다.
 - 프론트는 렌더 직전 `media:{id}`를 실제 접근 URL(`${NEXT_PUBLIC_API_BASE}/api/media/{id}` — 이 베이스에 이미 교회 접두사 `/church/<slug>`가 들어 있으므로 접두사를 다시 붙이지 않는다)로 치환한 뒤 새니타이즈하여 표시한다. 이 치환은 기존 마크다운 렌더·새니타이즈 파이프라인에 정규식 한 단계로 흡수된다. 공개 콘텐츠(공지·행사·부서·주보)에 쓰인 미디어만 이 주소로 익명에게 열리고, 그 외는 응답이 내려주는 서명 주소를 쓴다(§5.10 파일 서빙 접근 규칙).
-- **설계 노트(트레이드오프):** 미디어-콘텐츠 관계는 별도 연결 테이블이 아니라 본문 텍스트 내부의 `media:{id}` 문자열로 표현된다. 즉 이 관계는 정규화된 행이 아니라 비정규화된 텍스트 안에 존재한다. 이는 마크다운 본문 어느 위치에나 이미지를 자유롭게 삽입하기 위한 의도된 선택이며(노션·깃허브 등 마크다운 CMS의 공통 방식), 그 대가로 참조 추적은 LIKE 검색에 의존한다(아래 미디어 라이브러리 참조).
+- **설계 노트(트레이드오프):** 미디어-콘텐츠 관계는 별도 연결 테이블이 아니라 본문 텍스트 내부의 `media:{id}` 문자열로 표현된다. 즉 이 관계는 정규화된 행이 아니라 비정규화된 텍스트 안에 존재한다. 이는 마크다운 본문 어느 위치에나 이미지를 자유롭게 삽입하기 위한 의도된 선택이며(노션·깃허브 등 마크다운 CMS의 공통 방식), 그 대가로 참조 추적은 본문 텍스트 검색(숫자 경계를 지키는 정규식)에 의존한다(아래 미디어 라이브러리 참조).
 
 ### 5.1 인증 (Auth)
 | 메서드 | 경로 | 권한 | 설명 |
@@ -478,19 +478,19 @@ POST /api/auth/login
 | uploaded_by | BIGINT FK → members | 업로더 |
 | created_at | TIMESTAMP | |
 
-**참조 추적 (본문 LIKE + 갤러리 FK):**
+**참조 추적 (본문 정규식 + 갤러리 FK):**
 - 별도 참조 연결 테이블을 두지 않는다. 본문 텍스트의 `media:{id}`와 갤러리의 FK가 곧 진실이다.
-- 본문 필드(설교·공지·이벤트·부서·갤러리 앨범 description)는 `media:{id}` 문자열을 LIKE로 검색하고, 갤러리 사진은 `gallery_photos.media_id` FK를 정확히(`=`) 매칭한다. 둘을 합친 결과가 참조 목록이다.
+- 본문 필드(설교·공지·이벤트·부서·갤러리 앨범 description)는 `media:{id}` 문자열을 PostgreSQL 정규식 `~ 'media:{id}($|[^0-9])'`로 검색하고(뒤에 숫자가 오면 매칭하지 않아 `media:42`가 `media:420`·`media:421`에 걸리지 않는다. 공개 판단에 쓰이므로 단순 `LIKE '%media:{id}%'`로 바꾸면 안 된다), 갤러리 사진은 `gallery_photos.media_id` FK를 정확히(`=`) 매칭한다. 둘을 합친 결과가 참조 목록이다.
 ```sql
-SELECT 'sermon' AS type, id, title FROM sermons        WHERE content     LIKE '%media:42%' AND deleted_at IS NULL
+SELECT 'sermon' AS type, id, title FROM sermons        WHERE content     ~ 'media:42($|[^0-9])' AND deleted_at IS NULL
 UNION ALL
-SELECT 'notice',      id, title FROM notices            WHERE content     LIKE '%media:42%' AND deleted_at IS NULL
+SELECT 'notice',      id, title FROM notices            WHERE content     ~ 'media:42($|[^0-9])' AND deleted_at IS NULL
 UNION ALL
-SELECT 'event',       id, title FROM events             WHERE description LIKE '%media:42%' AND deleted_at IS NULL
+SELECT 'event',       id, title FROM events             WHERE description ~ 'media:42($|[^0-9])' AND deleted_at IS NULL
 UNION ALL
-SELECT 'department',  id, name  FROM departments        WHERE description LIKE '%media:42%' AND deleted_at IS NULL
+SELECT 'department',  id, name  FROM departments        WHERE description ~ 'media:42($|[^0-9])' AND deleted_at IS NULL
 UNION ALL
-SELECT 'gallery_album', id, title FROM gallery_albums   WHERE description LIKE '%media:42%' AND deleted_at IS NULL
+SELECT 'gallery_album', id, title FROM gallery_albums   WHERE description ~ 'media:42($|[^0-9])' AND deleted_at IS NULL
 UNION ALL
 SELECT 'gallery_photo', a.id, a.title FROM gallery_photos p
                                                JOIN gallery_albums a ON a.id = p.album_id
@@ -506,7 +506,7 @@ SELECT 'department', d.id, d.name FROM departments d
 WHERE p.media_id = 42 AND d.deleted_at IS NULL AND a.deleted_at IS NULL;
 ```
 - 마지막 두 갈래는 부서 대표 사진과 부서에 연결된 앨범의 사진이다(`type`은 `department`). 이 참조가 있는 미디어는 공개 서빙 대상이고 삭제도 막힌다.
-- 본문 LIKE는 교회 규모(글 수백 개)에서 문제없고, 갤러리 FK 매칭은 인덱스로 즉시 처리된다. 향후 글 폭증 시 본문에 `pg_trgm` 인덱스 추가(코드 불변).
+- 본문 정규식 검색은 교회 규모(글 수백 개)에서 문제없고, 갤러리 FK 매칭은 인덱스로 즉시 처리된다. 향후 글 폭증 시 본문에 `pg_trgm` 인덱스 추가(코드 불변).
 
 **삭제 정책 (차단형):**
 - 본문(`media:{id}`)이든 갤러리(`gallery_photos.media_id`)든 참조가 하나라도 있으면 삭제를 거부하고 **409 Conflict + 참조 목록**을 반환한다. 쓰고 있는 사진이 사라져 본문·갤러리가 깨지는 상태를 원천 차단한다.
@@ -706,7 +706,7 @@ soft delete를 전제로 하므로 **모든 목록 조회 인덱스는 `WHERE de
 | inquiries | `(created_at DESC) WHERE deleted_at IS NULL` | 문의 목록 |
 | inquiries | `(created_at DESC) WHERE deleted_at IS NULL AND completed_at IS NULL` | 미처리 문의 목록(관리자 기본 화면) |
 
-**미디어 참조 검색의 성능 한계 (중요):** 본문 참조 추적의 `LIKE '%media:{id}%'`는 **앞 와일드카드 때문에 B-tree 인덱스를 타지 못하고 풀스캔**한다. 교회 규모(도메인별 글 수백 개)에서는 5개 테이블 UNION 풀스캔도 체감 지연이 없어 수용한다. 글이 수만 건으로 늘면 본문 컬럼에 **`pg_trgm` GIN 인덱스**를 추가해 LIKE를 가속한다(스키마·코드 변경 없이 인덱스만 추가). 갤러리·주보의 `media_id` FK 검색은 일반 인덱스로 즉시 처리된다.
+**미디어 참조 검색의 성능 한계 (중요):** 본문 참조 추적의 정규식 `~ 'media:{id}($|[^0-9])'`은 **B-tree 인덱스를 타지 못하고 풀스캔**한다. 교회 규모(도메인별 글 수백 개)에서는 5개 테이블 UNION 풀스캔도 체감 지연이 없어 수용한다. 글이 수만 건으로 늘면 본문 컬럼에 **`pg_trgm` GIN 인덱스**를 추가해 정규식 검색을 가속한다(스키마·코드 변경 없이 인덱스만 추가). 갤러리·주보의 `media_id` FK 검색은 일반 인덱스로 즉시 처리된다.
 
 ---
 

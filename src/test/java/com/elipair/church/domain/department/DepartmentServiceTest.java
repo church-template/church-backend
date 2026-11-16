@@ -28,7 +28,10 @@ class DepartmentServiceTest {
     @BeforeEach
     void init() {
         repository = mock(DepartmentRepository.class);
-        service = new DepartmentService(repository);
+        service = new DepartmentService(
+                repository,
+                mock(com.elipair.church.domain.media.MediaService.class),
+                mock(com.elipair.church.domain.gallery.GalleryAlbumService.class));
     }
 
     private Department mockDept(long id, long version) {
@@ -43,7 +46,8 @@ class DepartmentServiceTest {
         when(repository.findMaxSortOrder()).thenReturn(Optional.empty());
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        DepartmentDetailResponse res = service.create(new DepartmentCreateRequest("예배부", "본문", "김목사", null, null));
+        DepartmentDetailResponse res =
+                service.create(new DepartmentCreateRequest("예배부", "본문", "김목사", null, null, null, null));
 
         assertThat(res.sortOrder()).isEqualTo(10); // 빈 테이블 → 10
         assertThat(res.parentId()).isNull();
@@ -57,7 +61,8 @@ class DepartmentServiceTest {
         when(repository.findMaxSortOrder()).thenReturn(Optional.of(20));
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        DepartmentDetailResponse res = service.create(new DepartmentCreateRequest("성가대", "본문", "이집사", 5L, null));
+        DepartmentDetailResponse res =
+                service.create(new DepartmentCreateRequest("성가대", "본문", "이집사", 5L, null, null, null));
 
         assertThat(res.sortOrder()).isEqualTo(30); // 20 + 10
         assertThat(res.parentId()).isEqualTo(5L);
@@ -68,7 +73,8 @@ class DepartmentServiceTest {
     void create_with_explicit_sort_order_skips_append() {
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        DepartmentDetailResponse res = service.create(new DepartmentCreateRequest("부서", "본문", "목사", null, 99));
+        DepartmentDetailResponse res =
+                service.create(new DepartmentCreateRequest("부서", "본문", "목사", null, 99, null, null));
 
         assertThat(res.sortOrder()).isEqualTo(99);
         verify(repository, never()).findMaxSortOrder(); // 명시값이라 append 조회 안 함
@@ -78,7 +84,7 @@ class DepartmentServiceTest {
     void create_with_nonexistent_parent_is_400() {
         when(repository.findByIdAndDeletedAtIsNull(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.create(new DepartmentCreateRequest("x", null, null, 99L, null)))
+        assertThatThrownBy(() -> service.create(new DepartmentCreateRequest("x", null, null, 99L, null, null, null)))
                 .isInstanceOfSatisfying(BusinessException.class, ex -> assertThat(ex.getErrorCode())
                         .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
         verify(repository, never()).save(any());
@@ -88,7 +94,7 @@ class DepartmentServiceTest {
     void update_with_matching_version_updates_locks_and_flushes() {
         Department d = mockDept(10L, 3L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(d));
-        DepartmentUpdateRequest req = new DepartmentUpdateRequest("새이름", "새본문", "새교역자", null, 5, 3L);
+        DepartmentUpdateRequest req = new DepartmentUpdateRequest("새이름", "새본문", "새교역자", null, 5, 3L, null, null);
 
         service.update(10L, req);
 
@@ -101,7 +107,7 @@ class DepartmentServiceTest {
     void update_with_stale_version_throws_409_and_skips_changes() {
         Department d = mockDept(10L, 3L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(d));
-        DepartmentUpdateRequest req = new DepartmentUpdateRequest("새이름", "새본문", "새교역자", null, 5, 2L);
+        DepartmentUpdateRequest req = new DepartmentUpdateRequest("새이름", "새본문", "새교역자", null, 5, 2L, null, null);
 
         assertThatThrownBy(() -> service.update(10L, req))
                 .isInstanceOfSatisfying(BusinessException.class, ex -> assertThat(ex.getErrorCode())
@@ -113,7 +119,7 @@ class DepartmentServiceTest {
     void update_self_reference_is_400() {
         Department d = mockDept(10L, 0L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(d));
-        DepartmentUpdateRequest req = new DepartmentUpdateRequest("x", null, null, 10L, null, 0L);
+        DepartmentUpdateRequest req = new DepartmentUpdateRequest("x", null, null, 10L, null, 0L, null, null);
 
         assertThatThrownBy(() -> service.update(10L, req))
                 .isInstanceOfSatisfying(BusinessException.class, ex -> assertThat(ex.getErrorCode())
@@ -129,7 +135,7 @@ class DepartmentServiceTest {
         Department twenty = mock(Department.class);
         when(twenty.getParentId()).thenReturn(10L);
         when(repository.findByIdAndDeletedAtIsNull(20L)).thenReturn(Optional.of(twenty));
-        DepartmentUpdateRequest req = new DepartmentUpdateRequest("x", null, null, 20L, null, 0L);
+        DepartmentUpdateRequest req = new DepartmentUpdateRequest("x", null, null, 20L, null, 0L, null, null);
 
         assertThatThrownBy(() -> service.update(10L, req))
                 .isInstanceOfSatisfying(BusinessException.class, ex -> assertThat(ex.getErrorCode())
@@ -141,7 +147,7 @@ class DepartmentServiceTest {
     void patch_with_null_parent_keeps_parent_and_skips_lock() {
         Department d = mockDept(10L, 0L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(d));
-        DepartmentPatchRequest req = new DepartmentPatchRequest("새이름", null, null, null, null, 0L);
+        DepartmentPatchRequest req = new DepartmentPatchRequest("새이름", null, null, null, null, 0L, null, null);
 
         service.patch(10L, req);
 
@@ -156,7 +162,7 @@ class DepartmentServiceTest {
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(d));
         Department parent = Department.create("상위", "본문", "목사", null, 10); // 루트
         when(repository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(parent));
-        DepartmentPatchRequest req = new DepartmentPatchRequest(null, null, null, 7L, null, 0L);
+        DepartmentPatchRequest req = new DepartmentPatchRequest(null, null, null, 7L, null, 0L, null, null);
 
         service.patch(10L, req);
 
@@ -169,7 +175,7 @@ class DepartmentServiceTest {
     void patch_with_stale_version_throws_409() {
         Department d = mockDept(10L, 3L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(d));
-        DepartmentPatchRequest req = new DepartmentPatchRequest("x", null, null, null, null, 2L);
+        DepartmentPatchRequest req = new DepartmentPatchRequest("x", null, null, null, null, 2L, null, null);
 
         assertThatThrownBy(() -> service.patch(10L, req))
                 .isInstanceOfSatisfying(BusinessException.class, ex -> assertThat(ex.getErrorCode())
@@ -229,7 +235,7 @@ class DepartmentServiceTest {
         Department twenty = mock(Department.class);
         when(twenty.getParentId()).thenReturn(10L);
         when(repository.findByIdAndDeletedAtIsNull(20L)).thenReturn(Optional.of(twenty));
-        DepartmentUpdateRequest req = new DepartmentUpdateRequest("x", null, null, 30L, null, 0L);
+        DepartmentUpdateRequest req = new DepartmentUpdateRequest("x", null, null, 30L, null, 0L, null, null);
 
         assertThatThrownBy(() -> service.update(10L, req))
                 .isInstanceOfSatisfying(BusinessException.class, ex -> assertThat(ex.getErrorCode())
@@ -241,7 +247,7 @@ class DepartmentServiceTest {
     void patch_self_reference_is_400() {
         Department d = mockDept(10L, 0L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(d));
-        DepartmentPatchRequest req = new DepartmentPatchRequest(null, null, null, 10L, null, 0L);
+        DepartmentPatchRequest req = new DepartmentPatchRequest(null, null, null, 10L, null, 0L, null, null);
 
         assertThatThrownBy(() -> service.patch(10L, req))
                 .isInstanceOfSatisfying(BusinessException.class, ex -> assertThat(ex.getErrorCode())

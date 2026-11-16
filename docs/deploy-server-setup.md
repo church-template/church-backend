@@ -174,5 +174,23 @@ Actions의 Deploy를 `image_tag`에 현재 버전을 넣어 실행한다.
 
 `FILE_BASE_URL`은 바인딩만 되고 읽는 코드가 없는 죽은 설정이라 맞출 필요가 없다.
 
+### 7-5. 미디어 접근 차단 켜기 (`MEDIA_ACCESS_ENFORCED`)
+
+`GET /api/media/{id}`는 공개 콘텐츠(공지·행사·부서·주보)에 쓰이지 않은 미디어(설교·갤러리 전용)를 서명 주소로만 연다.
+기본값은 `false`(서명 없는 요청도 200 — 옛 프론트가 깨지지 않게 하는 전환 기간 동작)이고, 아래 순서로 켠다. 순서가 바뀌면 옛 프론트의 갤러리 이미지가 404가 된다. 설교 응답은 서명 주소를 내려주지 않으므로 설교 본문에만 쓰인 이미지도 켠 뒤에는 404다.
+
+1. 백엔드를 `MEDIA_ACCESS_ENFORCED=false`(기본) 그대로 배포한다.
+2. **모든 교회 프론트**를 서명 주소(`${NEXT_PUBLIC_API_BASE}${url}`)를 쓰는 버전으로 배포하고 갤러리 이미지가 뜨는지 확인한다. 갤러리뿐 아니라 에디터에서 방금 올린 이미지의 미리보기와 관리자 미디어 라이브러리의 "열기"도 확인한다(둘 다 응답의 `url`을 써야 한다).
+3. **설교 본문 점검**(켜기 전 필수). 설교 응답은 서명 주소를 내려주지 않고 설교 본문은 공개 근거도 아니므로, 설교 본문에 이미지가 있으면 켠 뒤 404가 된다. 서버에서 실행해 결과가 **0행**인지 본다.
+   ```bash
+   docker exec -it church-backend-postgres-1 psql -U <DB_USERNAME> -d <DB_NAME> \
+     -c "select church_id, count(*) from sermons where deleted_at is null and content ~ 'media:[0-9]' group by church_id;"
+   ```
+   행이 나오면 **켜지 않는다.** 해당 설교 본문에서 이미지를 빼거나, 먼저 설교 응답에 서명 주소를 내려주도록 백엔드를 확장(후속 작업)한 뒤 켠다.
+4. 서버 `/srv/church-backend/.env`에 `MEDIA_ACCESS_ENFORCED=true`를 추가하고, Actions의 Deploy를 **현재 `image_tag`**로 다시 실행한다(위와 같이 서버에서 compose를 직접 실행하지 않는다). 프론트가 `next/image`를 쓰면 그 최적화 캐시(`/_next/image?url=…`)가 방금 막힌 이미지를 TTL이 끝날 때까지 내줄 수 있으니, 프론트의 Next.js 설정에서 확인한다.
+5. 확인: 서명 없이 갤러리에만 쓰인 미디어를 요청하면 404여야 한다(`curl -i https://api.<교회도메인>/church/<slug>/api/media/<id>`).
+
+되돌리려면 값을 `false`로 바꾸고 같은 방식으로 Deploy를 다시 실행한다.
+
 확인: `curl -s https://api.<교회도메인>/actuator/health` → `{"status":"UP"}`, 브라우저에서 자물쇠(유효 인증서).
 교회별 API는 `https://api.<교회도메인>/church/<slug>/api/main`으로 확인한다.

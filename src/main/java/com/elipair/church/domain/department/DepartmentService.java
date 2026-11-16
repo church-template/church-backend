@@ -5,6 +5,9 @@ import com.elipair.church.domain.department.dto.DepartmentCreateRequest;
 import com.elipair.church.domain.department.dto.DepartmentDetailResponse;
 import com.elipair.church.domain.department.dto.DepartmentPatchRequest;
 import com.elipair.church.domain.department.dto.DepartmentUpdateRequest;
+import com.elipair.church.domain.department.dto.IdChange;
+import com.elipair.church.domain.gallery.GalleryAlbumService;
+import com.elipair.church.domain.media.MediaService;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import com.elipair.church.global.tenant.TenantContext;
@@ -30,15 +33,21 @@ public class DepartmentService {
 
     private final DepartmentRepository repository;
 
-    public DepartmentService(DepartmentRepository repository) {
+    private final MediaService mediaService;
+    private final GalleryAlbumService albumService;
+
+    public DepartmentService(
+            DepartmentRepository repository, MediaService mediaService, GalleryAlbumService albumService) {
         this.repository = repository;
+        this.mediaService = mediaService;
+        this.albumService = albumService;
     }
 
     /** 공개 목록 — 비페이징 평배열(positions/tags 동급, 설계 §1). 프론트가 parentId로 트리를 조립한다. */
     public List<DepartmentCardResponse> list() {
         return repository.findByDeletedAtIsNullOrderBySortOrderAscIdAsc().stream()
                 .map(d -> new DepartmentCardResponse(
-                        d.getId(), d.getName(), d.getLeader(), d.getParentId(), d.getSortOrder()))
+                        d.getId(), d.getName(), d.getLeader(), d.getParentId(), d.getSortOrder(), d.getHeroMediaId()))
                 .toList();
     }
 
@@ -52,12 +61,15 @@ public class DepartmentService {
             repository.lockHierarchy(hierarchyLockKey()); // 부모 검증/삭제 경합 직렬화(설계 §5.3)
         }
         validateParent(null, req.parentId());
+        validateHeroMedia(req.heroMediaId());
+        validateAlbum(req.albumId());
         int sortOrder = req.sortOrder() != null
                 ? req.sortOrder()
                 : repository.findMaxSortOrder().map(max -> max + SORT_ORDER_GAP).orElse(SORT_ORDER_GAP);
-        Department saved = repository.save(
-                Department.create(req.name(), req.description(), req.leader(), req.parentId(), sortOrder));
-        return detail(saved);
+        Department created = Department.create(req.name(), req.description(), req.leader(), req.parentId(), sortOrder);
+        created.changeHeroMedia(req.heroMediaId());
+        created.changeAlbum(req.albumId());
+        return detail(repository.save(created));
     }
 
     @Transactional
@@ -67,6 +79,7 @@ public class DepartmentService {
         checkVersion(dept, req.version());
         validateParent(id, req.parentId());
         dept.update(req.name(), req.description(), req.leader(), req.parentId(), req.sortOrder());
+        applyLinks(dept, req.heroMediaId(), req.albumId());
         repository.flush(); // 엔티티 필드 변경분의 버전 UPDATE 즉시 반영(응답 version 정합)
         return detail(dept);
     }
@@ -82,6 +95,7 @@ public class DepartmentService {
             validateParent(id, req.parentId());
         }
         dept.applyPatch(req.name(), req.description(), req.leader(), req.parentId(), req.sortOrder());
+        applyLinks(dept, req.heroMediaId(), req.albumId());
         repository.flush();
         return detail(dept);
     }
@@ -137,7 +151,48 @@ public class DepartmentService {
         }
     }
 
+    /** IdChange가 null이면 유지, value null이면 비움, 값이면 검증 후 설정. */
+    private void applyLinks(Department dept, IdChange hero, IdChange album) {
+        if (hero != null) {
+            validateHeroMedia(hero.value());
+            dept.changeHeroMedia(hero.value());
+        }
+        if (album != null) {
+            validateAlbum(album.value());
+            dept.changeAlbum(album.value());
+        }
+    }
+
+    /** 잘못된 연결은 모두 400(이슈 #92) — requireImages의 404도 400으로 바꾼다. */
+    private void validateHeroMedia(Long mediaId) {
+        if (mediaId == null) {
+            return;
+        }
+        try {
+            mediaService.requireImages(List.of(mediaId));
+        } catch (BusinessException e) {
+            if (e.getErrorCode() != ErrorCode.RESOURCE_NOT_FOUND) {
+                throw e;
+            }
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "존재하지 않는 미디어입니다");
+        }
+    }
+
+    private void validateAlbum(Long albumId) {
+        if (albumId != null && albumService.findLivePhotoMediaIds(albumId).isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "존재하지 않는 앨범입니다");
+        }
+    }
+
     private DepartmentDetailResponse detail(Department d) {
+        Long albumId = d.getAlbumId();
+        List<Long> photos = albumId == null
+                ? null
+                : albumService.findLivePhotoMediaIds(albumId).orElse(null);
+        if (photos == null) { // 연결 앨범이 없거나 삭제됨
+            albumId = null;
+            photos = List.of();
+        }
         return new DepartmentDetailResponse(
                 d.getId(),
                 d.getName(),
@@ -147,7 +202,10 @@ public class DepartmentService {
                 d.getSortOrder(),
                 d.getCreatedAt(),
                 d.getUpdatedAt(),
-                d.getVersion());
+                d.getVersion(),
+                d.getHeroMediaId(),
+                albumId,
+                photos);
     }
 
     /** 계층 락 키에 교회 id를 섞는다(#86) — 교회끼리 서로의 부서 변경을 기다리지 않게 한다. */

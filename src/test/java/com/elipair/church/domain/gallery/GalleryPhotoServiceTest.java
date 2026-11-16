@@ -69,7 +69,7 @@ class GalleryPhotoServiceTest {
     void addPhotos_uploads_new_files_via_uploadImage() {
         MockMultipartFile f = new MockMultipartFile("files", "p.jpg", "image/jpeg", new byte[] {1, 2, 3});
         when(mediaService.uploadImage(eq(f), eq(7L)))
-                .thenReturn(new MediaResponse(99L, "p.jpg", "image/jpeg", 3L, 7L, LocalDateTime.now()));
+                .thenReturn(new MediaResponse(99L, "p.jpg", "image/jpeg", 3L, 7L, LocalDateTime.now(), null));
 
         service.addPhotos(1L, List.of(f), null, 7L);
 
@@ -82,7 +82,7 @@ class GalleryPhotoServiceTest {
     void addPhotos_mixed_appends_mediaIds_then_files_in_order() {
         MockMultipartFile f = new MockMultipartFile("files", "p.jpg", "image/jpeg", new byte[] {1, 2, 3});
         when(mediaService.uploadImage(any(MultipartFile.class), eq(7L)))
-                .thenReturn(new MediaResponse(99L, "p.jpg", "image/jpeg", 3L, 7L, LocalDateTime.now()));
+                .thenReturn(new MediaResponse(99L, "p.jpg", "image/jpeg", 3L, 7L, LocalDateTime.now(), null));
 
         service.addPhotos(1L, List.of(f), List.of(5L), 7L);
 

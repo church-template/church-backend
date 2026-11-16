@@ -21,6 +21,11 @@ class EventReferenceProvider implements MediaReferenceProvider {
     }
 
     @Override
+    public boolean grantsPublicAccess() {
+        return true;
+    }
+
+    @Override
     public List<ContentRef> findReferences(long mediaId) {
         String pattern = "media:" + mediaId + "($|[^0-9])";
         return repository.findReferencesByMedia(pattern, TenantContext.require()).stream()

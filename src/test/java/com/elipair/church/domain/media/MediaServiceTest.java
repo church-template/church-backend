@@ -35,10 +35,26 @@ class MediaServiceTest {
     @Mock
     private FileStorage fileStorage;
 
+    @Mock
+    private MediaUrlSigner signer;
+
     private final MimeTypeValidator mimeTypeValidator = new MimeTypeValidator();
 
     private MediaService service(List<MediaReferenceProvider> providers) {
-        return new MediaService(repository, fileStorage, mimeTypeValidator, providers);
+        return new MediaService(
+                repository,
+                fileStorage,
+                mimeTypeValidator,
+                providers,
+                signer,
+                new MediaProperties(false),
+                java.time.Clock.systemUTC());
+    }
+
+    /** 저장된 것처럼 id를 채운다(응답이 서명 주소를 만들려면 id가 필요). */
+    private static Media withId(Media media) {
+        org.springframework.test.util.ReflectionTestUtils.setField(media, "id", 1L);
+        return media;
     }
 
     private Media media() {
@@ -51,7 +67,7 @@ class MediaServiceTest {
         // 헤더는 image/png라 거짓말하지만 실제 바이트는 JPEG → 저장 mime은 스니핑 결과여야 한다
         MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/png", jpeg);
         when(fileStorage.store(file)).thenReturn("2026/06/x.jpg");
-        when(repository.save(any(Media.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(repository.save(any(Media.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
 
         MediaResponse res = service(List.of()).upload(file, 7L);
 
@@ -163,7 +179,7 @@ class MediaServiceTest {
     void uploadImage_stores_image_and_returns_response() {
         MockMultipartFile file = new MockMultipartFile("file", "p.jpg", "application/octet-stream", JPEG);
         when(fileStorage.store(file)).thenReturn("2026/06/x.jpg");
-        when(repository.save(any(Media.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(repository.save(any(Media.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
 
         MediaResponse res = service(List.of()).uploadImage(file, 7L);
 
@@ -236,7 +252,7 @@ class MediaServiceTest {
     void uploadPdf_stores_pdf_and_returns_response() {
         MockMultipartFile file = new MockMultipartFile("file", "b.pdf", "application/octet-stream", PDF);
         when(fileStorage.store(file)).thenReturn("2026/06/b.pdf");
-        when(repository.save(any(Media.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(repository.save(any(Media.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
 
         MediaResponse res = service(List.of()).uploadPdf(file, 7L);
 

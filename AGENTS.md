@@ -29,7 +29,7 @@
   (부여는 strictly-below, 역할 수정은 at-or-below, 역할의 priority를 정할 때(생성·변경)는 strictly-below, 관리자가 다른 회원을 수정·직분 지정·비밀번호 초기화할 때는
   대상 최고 priority ≤ 요청자 maxPriority). 역할·직분과 "마지막 SUPER_ADMIN" 집계는 교회 단위. → `rbac-authorization.md`
 - **경로 인가**: `/api/admin/**` 인증+메서드 권한 · `/api/gallery/**`·`/api/bible-challenges/**`·`/api/sermons/**`·`/api/vehicle-runs/**`
-  회원전용(각 `GALLERY_VIEW`/`CHALLENGE_PARTICIPATE`/`SERMON_VIEW`/`VEHICLE_APPLY`) · 나머지 public(`/api/main` 포함, 의도적).
+  회원전용(각 `GALLERY_VIEW`/`CHALLENGE_PARTICIPATE`/`SERMON_VIEW`/`VEHICLE_APPLY`) · 나머지 public(`/api/main` 포함, 의도적; `/api/media/{id}`는 공개 콘텐츠에 쓰인 미디어만 공개, 나머지는 서명 주소).
   교회 접두사 `/church/{slug}`는 `TenantFilter`가 매처보다 먼저 떼므로 매처·컨트롤러 경로는 `/api/**` 그대로.
   정본: `SecurityConfig` 매처 체인. → `rbac-authorization.md`
 - **JWT**: `sub`=member uuid(BIGINT id 금지), payload는 평탄화된 permissions+maxPriority+`cid`(교회 id).
@@ -39,7 +39,8 @@
 - **API**: RFC 7807 단일 에러 envelope + 정해진 errorCode 표, 목록은 `{content, page{...}}` 페이지 envelope,
   본문 markdown은 raw 저장. → `api-conventions.md`
 - **미디어**: 이미지·PDF는 중앙 `media` 테이블 하나, 본문 참조는 `media:{id}` 문자열(URL 금지),
-  삭제는 참조 있으면 409 차단. → `media-library.md`
+  삭제는 참조 있으면 409 차단. `GET /api/media/{id}`는 공개 콘텐츠(공지·행사·부서·주보)에 쓰인 미디어만 공개,
+  나머지는 서명 주소(`?exp=&sig=`, 1시간, 교회 접두사 없음)이고 `MEDIA_ACCESS_ENFORCED=true`면 서명 없는 비공개 요청은 404. → `media-library.md`
 - **SB4**: web 스타터는 `spring-boot-starter-webmvc`, 테스트는 모듈별 `*-test`. → `spring-boot-4.md`
 
 ## 명령어

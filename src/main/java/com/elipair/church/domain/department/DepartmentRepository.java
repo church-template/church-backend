@@ -21,14 +21,20 @@ public interface DepartmentRepository extends JpaRepository<Department, Long> {
     Optional<Integer> findMaxSortOrder();
 
     /**
-     * 본문(description)이 media:{id}를 참조하는 미삭제 부서(id·name→title). PG 정규식 ~ 로 경계 안전 매칭.
-     * pattern 예: "media:42($|[^0-9])" — 42가 media:420/421에 매칭되지 않는다.
+     * 미디어를 쓰는 미삭제 부서(id·name→title), 부서당 1건. 근거 3가지 중 하나면 잡힌다:
+     * 본문(description)의 media:{id}(PG 정규식 ~ 로 경계 안전 매칭, pattern 예: "media:42($|[^0-9])"),
+     * 대표 사진(hero_media_id), 연결 앨범(미삭제)의 사진.
      */
     @Query(
-            value =
-                    "select id as id, name as title from departments where church_id = :churchId and deleted_at is null and description ~ :pattern",
+            value = "select distinct d.id as id, d.name as title from departments d "
+                    + "where d.church_id = :churchId and d.deleted_at is null and ("
+                    + "d.description ~ :pattern or d.hero_media_id = :mediaId or exists ("
+                    + "select 1 from gallery_photos p join gallery_albums a on a.id = p.album_id "
+                    + "where p.album_id = d.album_id and p.media_id = :mediaId "
+                    + "and a.deleted_at is null and p.church_id = :churchId and a.church_id = :churchId))",
             nativeQuery = true)
-    List<DepartmentRefRow> findReferencesByMedia(@Param("pattern") String pattern, @Param("churchId") long churchId);
+    List<DepartmentRefRow> findReferencesByMedia(
+            @Param("pattern") String pattern, @Param("mediaId") long mediaId, @Param("churchId") long churchId);
 
     /**
      * 계층 변경 트랜잭션 직렬화(설계 §5.3). pg_advisory_xact_lock은 트랜잭션 종료 시 자동 해제(수동 unlock 불필요).

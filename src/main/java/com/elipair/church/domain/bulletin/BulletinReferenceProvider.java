@@ -20,6 +20,11 @@ class BulletinReferenceProvider implements MediaReferenceProvider {
     }
 
     @Override
+    public boolean grantsPublicAccess() {
+        return true;
+    }
+
+    @Override
     public List<ContentRef> findReferences(long mediaId) {
         return repository.findReferencesByMediaId(mediaId, TenantContext.require()).stream()
                 .map(row -> new ContentRef("bulletin", row.getId(), row.getTitle()))

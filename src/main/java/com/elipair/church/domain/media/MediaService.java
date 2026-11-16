@@ -14,7 +14,9 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -38,16 +40,25 @@ public class MediaService {
     private final FileStorage fileStorage;
     private final MimeTypeValidator mimeTypeValidator;
     private final List<MediaReferenceProvider> referenceProviders;
+    private final MediaUrlSigner signer;
+    private final MediaProperties properties;
+    private final java.time.Clock clock;
 
     public MediaService(
             MediaRepository repository,
             FileStorage fileStorage,
             MimeTypeValidator mimeTypeValidator,
-            List<MediaReferenceProvider> referenceProviders) {
+            List<MediaReferenceProvider> referenceProviders,
+            MediaUrlSigner signer,
+            MediaProperties properties,
+            java.time.Clock clock) {
         this.repository = repository;
         this.fileStorage = fileStorage;
         this.mimeTypeValidator = mimeTypeValidator;
         this.referenceProviders = referenceProviders;
+        this.signer = signer;
+        this.properties = properties;
+        this.clock = clock;
     }
 
     @Transactional
@@ -111,7 +122,7 @@ public class MediaService {
         try {
             String filename = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "upload";
             Media media = repository.save(Media.create(filename, storedPath, mimeType, file.getSize(), uploaderId));
-            return MediaResponse.from(media);
+            return MediaResponse.from(media, signer.signedPath(media.getId()));
         } catch (RuntimeException e) {
             // DB 저장 실패 시 방금 쓴 파일을 best-effort 정리 — 레코드 없는 고아 파일은 차단삭제로도 못 지우는 진짜 누수.
             try {
@@ -123,22 +134,67 @@ public class MediaService {
         }
     }
 
+    public String signedUrl(Long mediaId) {
+        return signer.signedPath(mediaId);
+    }
+
+    /** 같은 교회에 존재하는 미디어만 id → 서명 주소로(없는 id는 빠진다). */
+    public Map<Long, String> signedUrls(Collection<Long> ids) {
+        return repository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Media::getId, m -> signer.signedPath(m.getId())));
+    }
+
     public Page<MediaResponse> list(String type, LocalDate from, LocalDate to, Pageable pageable) {
         String mimePrefix = mimePrefix(type);
         LocalDateTime fromAt = from == null ? null : from.atStartOfDay();
         LocalDateTime toAt = to == null ? null : to.plusDays(1).atStartOfDay(); // 상한 배타(해당 날짜 포함)
-        return repository.search(mimePrefix, fromAt, toAt, pageable).map(MediaResponse::from);
+        return repository
+                .search(mimePrefix, fromAt, toAt, pageable)
+                .map(m -> MediaResponse.from(m, signer.signedPath(m.getId())));
     }
 
     public MediaResponse get(Long id) {
-        return MediaResponse.from(findById(id));
+        Media media = findById(id);
+        return MediaResponse.from(media, signer.signedPath(media.getId()));
     }
 
-    /** 공개 서빙용. stored_path를 외부에 노출하지 않고 로드된 Resource만 전달한다. */
-    public MediaContent serve(Long id) {
+    /**
+     * 공개 서빙용. stored_path를 외부에 노출하지 않고 로드된 Resource만 전달한다.
+     * exp·sig가 둘 다 있으면 서명만 본다(틀리면 404). 둘 중 하나만 있어도 404. 없으면 공개 근거 참조가 있어야 public 캐시로 내려가고,
+     * 아니면 차단 켜짐일 때 404(존재 여부를 드러내지 않는다), 꺼짐이면 private 캐시로 내려간다.
+     */
+    public MediaContent serve(Long id, String exp, String sig) {
         Media media = findById(id);
+        String cacheControl;
+        if (exp != null && sig != null) {
+            long expSeconds;
+            try {
+                expSeconds = Long.parseLong(exp);
+            } catch (NumberFormatException e) { // 숫자가 아니거나 범위 초과 — 서명 실패와 같게 404
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+            }
+            if (!signer.verify(id, expSeconds, sig)) {
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+            }
+            cacheControl = "private, max-age=" + (expSeconds - clock.instant().getEpochSecond());
+        } else if (exp != null || sig != null) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        } else if (isPublic(id)) {
+            cacheControl = "public, max-age=86400";
+        } else if (properties.accessEnforced()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        } else {
+            cacheControl = "private, max-age=86400";
+        }
         Resource resource = fileStorage.load(media.getStoredPath());
-        return new MediaContent(resource, media.getMimeType(), media.getFilename());
+        return new MediaContent(resource, media.getMimeType(), media.getFilename(), cacheControl);
+    }
+
+    /** 공개 근거(공지·행사·부서·주보) 참조가 하나라도 있으면 true. 익명 요청마다 도므로 해당 provider만, 첫 적중에서 멈춘다. */
+    public boolean isPublic(long mediaId) {
+        return referenceProviders.stream()
+                .filter(MediaReferenceProvider::grantsPublicAccess)
+                .anyMatch(provider -> !provider.findReferences(mediaId).isEmpty());
     }
 
     public MediaReferencesResponse references(Long id) {

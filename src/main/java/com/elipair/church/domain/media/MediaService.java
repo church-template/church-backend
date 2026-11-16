@@ -38,16 +38,25 @@ public class MediaService {
     private final FileStorage fileStorage;
     private final MimeTypeValidator mimeTypeValidator;
     private final List<MediaReferenceProvider> referenceProviders;
+    private final MediaUrlSigner signer;
+    private final MediaProperties properties;
+    private final java.time.Clock clock;
 
     public MediaService(
             MediaRepository repository,
             FileStorage fileStorage,
             MimeTypeValidator mimeTypeValidator,
-            List<MediaReferenceProvider> referenceProviders) {
+            List<MediaReferenceProvider> referenceProviders,
+            MediaUrlSigner signer,
+            MediaProperties properties,
+            java.time.Clock clock) {
         this.repository = repository;
         this.fileStorage = fileStorage;
         this.mimeTypeValidator = mimeTypeValidator;
         this.referenceProviders = referenceProviders;
+        this.signer = signer;
+        this.properties = properties;
+        this.clock = clock;
     }
 
     @Transactional
@@ -134,11 +143,37 @@ public class MediaService {
         return MediaResponse.from(findById(id));
     }
 
-    /** 공개 서빙용. stored_path를 외부에 노출하지 않고 로드된 Resource만 전달한다. */
-    public MediaContent serve(Long id) {
+    /**
+     * 공개 서빙용. stored_path를 외부에 노출하지 않고 로드된 Resource만 전달한다.
+     * exp·sig가 둘 다 있으면 서명만 본다(틀리면 404). 둘 중 하나만 있어도 404. 없으면 공개 근거 참조가 있어야 public 캐시로 내려가고,
+     * 아니면 차단 켜짐일 때 404(존재 여부를 드러내지 않는다), 꺼짐이면 private 캐시로 내려간다.
+     */
+    public MediaContent serve(Long id, Long exp, String sig) {
         Media media = findById(id);
+        String cacheControl;
+        if (exp != null && sig != null) {
+            if (!signer.verify(id, exp, sig)) {
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+            }
+            cacheControl = "private, max-age=" + (exp - clock.instant().getEpochSecond());
+        } else if (exp != null || sig != null) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        } else if (isPublic(id)) {
+            cacheControl = "public, max-age=86400";
+        } else if (properties.accessEnforced()) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        } else {
+            cacheControl = "private, max-age=86400";
+        }
         Resource resource = fileStorage.load(media.getStoredPath());
-        return new MediaContent(resource, media.getMimeType(), media.getFilename());
+        return new MediaContent(resource, media.getMimeType(), media.getFilename(), cacheControl);
+    }
+
+    /** 공개 근거(공지·행사·부서·주보) 참조가 하나라도 있으면 true. 익명 요청마다 도므로 해당 provider만, 첫 적중에서 멈춘다. */
+    public boolean isPublic(long mediaId) {
+        return referenceProviders.stream()
+                .filter(MediaReferenceProvider::grantsPublicAccess)
+                .anyMatch(provider -> !provider.findReferences(mediaId).isEmpty());
     }
 
     public MediaReferencesResponse references(Long id) {

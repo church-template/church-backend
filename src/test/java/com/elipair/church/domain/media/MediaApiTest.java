@@ -190,6 +190,15 @@ class MediaApiTest {
     }
 
     @Test
+    void 차단_꺼짐이면_비공개도_200이지만_private_캐시() throws Exception {
+        long id = upload(JPEG, "a.jpg", "image/jpeg"); // 어디에도 안 쓰인 미디어
+
+        mockMvc.perform(get("/api/media/" + id))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "private, max-age=86400"));
+    }
+
+    @Test
     void public_serving_unknown_id_is_404() throws Exception {
         mockMvc.perform(get("/api/media/999999")).andExpect(status().isNotFound());
     }

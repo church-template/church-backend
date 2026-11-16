@@ -38,7 +38,14 @@ class MediaServiceTest {
     private final MimeTypeValidator mimeTypeValidator = new MimeTypeValidator();
 
     private MediaService service(List<MediaReferenceProvider> providers) {
-        return new MediaService(repository, fileStorage, mimeTypeValidator, providers);
+        return new MediaService(
+                repository,
+                fileStorage,
+                mimeTypeValidator,
+                providers,
+                null,
+                new MediaProperties(false),
+                java.time.Clock.systemUTC());
     }
 
     private Media media() {

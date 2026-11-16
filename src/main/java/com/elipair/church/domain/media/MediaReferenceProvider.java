@@ -12,4 +12,9 @@ import java.util.List;
 public interface MediaReferenceProvider {
 
     List<ContentRef> findReferences(long mediaId);
+
+    /** true면 이 provider의 참조가 있는 미디어는 익명 공개 대상이다(공지·행사·부서·주보). 설교·갤러리는 기본값 false. */
+    default boolean grantsPublicAccess() {
+        return false;
+    }
 }

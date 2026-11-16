@@ -13,6 +13,7 @@ import com.elipair.church.global.exception.ErrorCode;
 import com.elipair.church.global.tenant.TenantContext;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -72,6 +73,14 @@ public class GalleryAlbumService {
                 a.getCreatedAt(),
                 tagsMap.getOrDefault(a.getId(), List.of()),
                 authorMap.getOrDefault(a.getUpdatedBy(), AuthorDisplayService.UNKNOWN)));
+    }
+
+    /** 부서 공개 상세용 — 미삭제 앨범의 사진 mediaId를 앨범 순서(sort_order, id)로. 앨범이 없거나 삭제됐으면 empty. */
+    public Optional<List<Long>> findLivePhotoMediaIds(Long albumId) {
+        return repository.findByIdAndDeletedAtIsNull(albumId).map(a -> photoRepository
+                .findByAlbumIdOrderBySortOrderAscIdAsc(a.getId()).stream()
+                .map(GalleryPhoto::getMediaId)
+                .toList());
     }
 
     public GalleryAlbumDetailResponse get(Long id) {

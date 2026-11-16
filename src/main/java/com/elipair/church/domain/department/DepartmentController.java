@@ -24,7 +24,7 @@ public class DepartmentController {
                     전체 부서를 조회한다. 프론트가 `parentId`로 트리를 조립한다.
 
                     - 인증(JWT): 불필요
-                    - 반환값: `DepartmentCardResponse` 배열 — 카드 메타만(description 제외; 이름·담당·상위·정렬), 비페이징 평배열(sortOrder·id 순)
+                    - 반환값: `DepartmentCardResponse` 배열 — 카드 메타만(description 제외; 이름·담당·상위·정렬·`heroMediaId` 대표 사진), 비페이징 평배열(sortOrder·id 순)
                     """)
     @GetMapping("/api/departments")
     public List<DepartmentCardResponse> list() {
@@ -36,7 +36,8 @@ public class DepartmentController {
 
                     - 인증(JWT): 불필요
                     - 경로 변수: `id` — 부서 ID
-                    - 반환값: `DepartmentDetailResponse` — description·담당·`parentId`(상위)·정렬·`version` 포함
+                    - 반환값: `DepartmentDetailResponse` — description·담당·`parentId`(상위)·정렬·`version`·`heroMediaId`(대표 사진) 포함
+                    - `albumId`·`photos`: 연결 앨범의 사진 mediaId 목록(앨범 순서). 앨범이 없거나 삭제되면 `albumId` null, `photos` 빈 배열
                     """)
     @GetMapping("/api/departments/{id}")
     public DepartmentDetailResponse get(@PathVariable Long id) {

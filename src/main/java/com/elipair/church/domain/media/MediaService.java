@@ -14,7 +14,9 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -120,7 +122,7 @@ public class MediaService {
         try {
             String filename = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "upload";
             Media media = repository.save(Media.create(filename, storedPath, mimeType, file.getSize(), uploaderId));
-            return MediaResponse.from(media);
+            return MediaResponse.from(media, signer.signedPath(media.getId()));
         } catch (RuntimeException e) {
             // DB 저장 실패 시 방금 쓴 파일을 best-effort 정리 — 레코드 없는 고아 파일은 차단삭제로도 못 지우는 진짜 누수.
             try {
@@ -132,15 +134,28 @@ public class MediaService {
         }
     }
 
+    public String signedUrl(Long mediaId) {
+        return signer.signedPath(mediaId);
+    }
+
+    /** 같은 교회에 존재하는 미디어만 id → 서명 주소로(없는 id는 빠진다). */
+    public Map<Long, String> signedUrls(Collection<Long> ids) {
+        return repository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Media::getId, m -> signer.signedPath(m.getId())));
+    }
+
     public Page<MediaResponse> list(String type, LocalDate from, LocalDate to, Pageable pageable) {
         String mimePrefix = mimePrefix(type);
         LocalDateTime fromAt = from == null ? null : from.atStartOfDay();
         LocalDateTime toAt = to == null ? null : to.plusDays(1).atStartOfDay(); // 상한 배타(해당 날짜 포함)
-        return repository.search(mimePrefix, fromAt, toAt, pageable).map(MediaResponse::from);
+        return repository
+                .search(mimePrefix, fromAt, toAt, pageable)
+                .map(m -> MediaResponse.from(m, signer.signedPath(m.getId())));
     }
 
     public MediaResponse get(Long id) {
-        return MediaResponse.from(findById(id));
+        Media media = findById(id);
+        return MediaResponse.from(media, signer.signedPath(media.getId()));
     }
 
     /**

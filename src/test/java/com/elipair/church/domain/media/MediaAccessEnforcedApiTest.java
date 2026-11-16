@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.elipair.church.TestcontainersConfiguration;
 import com.elipair.church.domain.bulletin.Bulletin;
 import com.elipair.church.domain.bulletin.BulletinRepository;
+import com.elipair.church.domain.department.Department;
+import com.elipair.church.domain.department.DepartmentRepository;
 import com.elipair.church.domain.gallery.GalleryAlbum;
 import com.elipair.church.domain.gallery.GalleryAlbumRepository;
 import com.elipair.church.domain.gallery.GalleryPhoto;
@@ -23,6 +25,7 @@ import com.elipair.church.global.security.JwtTokenProvider;
 import com.elipair.church.global.security.MemberPrincipal;
 import com.elipair.testfixture.TwoChurches;
 import com.jayway.jsonpath.JsonPath;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.LocalDate;
@@ -84,6 +87,9 @@ class MediaAccessEnforcedApiTest {
     private GalleryPhotoRepository photoRepository;
 
     @Autowired
+    private DepartmentRepository departmentRepository;
+
+    @Autowired
     private MediaUrlSigner signer;
 
     @Autowired
@@ -100,6 +106,7 @@ class MediaAccessEnforcedApiTest {
 
     @AfterEach
     void cleanup() {
+        departmentRepository.deleteAll();
         photoRepository.deleteAll();
         albumRepository.deleteAll();
         noticeRepository.deleteAll();
@@ -242,5 +249,101 @@ class MediaAccessEnforcedApiTest {
         long id = upload(JPEG, "a.jpg", "image/jpeg");
 
         mockMvc.perform(get("/api/media/" + id)).andExpect(status().isNotFound());
+    }
+
+    private String galleryToken() {
+        return "Bearer "
+                + provider.issueAccess(
+                        new MemberPrincipal(uploaderId, "uuid-m", "교인", 100), null, List.of("GALLERY_VIEW"));
+    }
+
+    private String getJson(String path) throws Exception {
+        return mockMvc.perform(get(path).header("Authorization", galleryToken()))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void 앨범_상세_사진마다_서명_url이_있고_그_주소로_파일이_열린다() throws Exception {
+        long id = upload(JPEG, "a.jpg", "image/jpeg");
+        GalleryAlbum album = albumRepository.saveAndFlush(GalleryAlbum.create("앨범", "설명"));
+        photoRepository.saveAndFlush(GalleryPhoto.create(album.getId(), id, 0));
+
+        String json = getJson("/api/gallery/albums/" + album.getId());
+        assertThat((Number) JsonPath.read(json, "$.photos[0].mediaId")).isEqualTo((int) id);
+        String url = JsonPath.read(json, "$.photos[0].url");
+
+        mockMvc.perform(get(URI.create(url)))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(JPEG));
+        mockMvc.perform(get("/api/media/" + id)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void 앨범_목록_카드에_thumbnailUrl() throws Exception {
+        long id = upload(JPEG, "a.jpg", "image/jpeg");
+        GalleryAlbum album = albumRepository.saveAndFlush(GalleryAlbum.create("앨범", "설명"));
+        photoRepository.saveAndFlush(GalleryPhoto.create(album.getId(), id, 0));
+        albumRepository.saveAndFlush(GalleryAlbum.create("빈 앨범", "설명"));
+
+        String json = getJson("/api/gallery/albums");
+        String url = ((List<String>) JsonPath.read(json, "$.content[?(@.title=='앨범')].thumbnailUrl")).get(0);
+        assertThat(url).startsWith("/api/media/" + id + "?exp=");
+        assertThat((List<?>) JsonPath.read(json, "$.content[?(@.title=='빈 앨범')].thumbnailUrl"))
+                .containsOnlyNulls();
+        mockMvc.perform(get(URI.create(url))).andExpect(status().isOk());
+    }
+
+    @Test
+    void 앨범_설명의_media_참조가_mediaUrls에_있다() throws Exception {
+        long id = upload(JPEG, "a.jpg", "image/jpeg");
+        GalleryAlbum album = albumRepository.saveAndFlush(
+                GalleryAlbum.create("앨범", "본문 ![](media:" + id + ") 오타 ![](media:999999)"));
+
+        String json = getJson("/api/gallery/albums/" + album.getId());
+        java.util.Map<String, String> urls = JsonPath.read(json, "$.mediaUrls");
+        assertThat(urls).containsOnlyKeys(String.valueOf(id));
+        mockMvc.perform(get(URI.create(urls.get(String.valueOf(id))))).andExpect(status().isOk());
+    }
+
+    @Test
+    void 관리_미디어_업로드_응답의_url로_미리보기가_열린다() throws Exception {
+        String token = "Bearer "
+                + provider.issueAccess(
+                        new MemberPrincipal(uploaderId, "uuid-admin", "관리자", 1000), null, List.of("MEDIA_MANAGE"));
+        String json = mockMvc.perform(multipart("/api/admin/media")
+                        .file(new MockMultipartFile("file", "a.jpg", "image/jpeg", JPEG))
+                        .header("Authorization", token))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        long id = ((Number) JsonPath.read(json, "$.id")).longValue();
+        String url = JsonPath.read(json, "$.url");
+
+        mockMvc.perform(get("/api/media/" + id)).andExpect(status().isNotFound());
+        mockMvc.perform(get(URI.create(url)))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(JPEG));
+        // 목록·상세에도 url
+        mockMvc.perform(get("/api/admin/media").header("Authorization", token))
+                .andExpect(jsonPath("$.content[0].url").isString());
+        mockMvc.perform(get("/api/admin/media/" + id).header("Authorization", token))
+                .andExpect(jsonPath("$.url").isString());
+    }
+
+    @Test
+    void 부서_대표_사진은_익명으로_200_public_캐시() throws Exception {
+        long id = upload(JPEG, "a.jpg", "image/jpeg");
+        Department dept = Department.create("청년부", "설명", null, null, 0);
+        dept.changeHeroMedia(id);
+        departmentRepository.saveAndFlush(dept);
+
+        mockMvc.perform(get("/api/media/" + id))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "public, max-age=86400"));
     }
 }

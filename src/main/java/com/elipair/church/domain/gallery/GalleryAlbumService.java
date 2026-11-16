@@ -12,6 +12,7 @@ import com.elipair.church.domain.tag.ContentTagService;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import com.elipair.church.global.tenant.TenantContext;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class GalleryAlbumService {
 
-    private static final Pattern MEDIA_REF = Pattern.compile("media:(\\d+)");
+    private static final Pattern MEDIA_REF = Pattern.compile("media:(\\d{1,18})(?!\\d)");
     private static final ContentResourceType TYPE = ContentResourceType.GALLERY_ALBUM;
 
     private final GalleryAlbumRepository repository;
@@ -72,15 +73,18 @@ public class GalleryAlbumService {
                 : photoRepository.countByAlbumIds(ids).stream()
                         .collect(Collectors.toMap(AlbumPhotoCountRow::getAlbumId, AlbumPhotoCountRow::getCount));
 
-        return page.map(a -> new GalleryAlbumCardResponse(
-                a.getId(),
-                a.getTitle(),
-                thumbMap.get(a.getId()),
-                countMap.getOrDefault(a.getId(), 0L),
-                a.getCreatedAt(),
-                tagsMap.getOrDefault(a.getId(), List.of()),
-                authorMap.getOrDefault(a.getUpdatedBy(), AuthorDisplayService.UNKNOWN),
-                thumbMap.containsKey(a.getId()) ? mediaService.signedUrl(thumbMap.get(a.getId())) : null));
+        return page.map(a -> {
+            Long thumbId = thumbMap.get(a.getId());
+            return new GalleryAlbumCardResponse(
+                    a.getId(),
+                    a.getTitle(),
+                    thumbId,
+                    countMap.getOrDefault(a.getId(), 0L),
+                    a.getCreatedAt(),
+                    tagsMap.getOrDefault(a.getId(), List.of()),
+                    authorMap.getOrDefault(a.getUpdatedBy(), AuthorDisplayService.UNKNOWN),
+                    thumbId == null ? null : mediaService.signedUrl(thumbId));
+        });
     }
 
     /** 부서 공개 상세용 — 미삭제 앨범의 사진 mediaId를 앨범 순서(sort_order, id)로. 앨범이 없거나 삭제됐으면 empty. */
@@ -162,7 +166,7 @@ public class GalleryAlbumService {
             return List.of();
         }
         Matcher m = MEDIA_REF.matcher(description);
-        List<Long> ids = new java.util.ArrayList<>();
+        List<Long> ids = new ArrayList<>();
         while (m.find()) {
             ids.add(Long.valueOf(m.group(1)));
         }

@@ -30,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -304,9 +305,20 @@ class MediaAccessEnforcedApiTest {
                 GalleryAlbum.create("앨범", "본문 ![](media:" + id + ") 오타 ![](media:999999)"));
 
         String json = getJson("/api/gallery/albums/" + album.getId());
-        java.util.Map<String, String> urls = JsonPath.read(json, "$.mediaUrls");
+        Map<String, String> urls = JsonPath.read(json, "$.mediaUrls");
         assertThat(urls).containsOnlyKeys(String.valueOf(id));
         mockMvc.perform(get(URI.create(urls.get(String.valueOf(id))))).andExpect(status().isOk());
+    }
+
+    @Test
+    void 앨범_설명에_너무_큰_media_id가_있어도_200이고_유효한_id만_mediaUrls에_있다() throws Exception {
+        long id = upload(JPEG, "a.jpg", "image/jpeg");
+        GalleryAlbum album = albumRepository.saveAndFlush(
+                GalleryAlbum.create("앨범", "![](media:99999999999999999999999) ![](media:" + id + ")"));
+
+        String json = getJson("/api/gallery/albums/" + album.getId());
+        Map<String, String> urls = JsonPath.read(json, "$.mediaUrls");
+        assertThat(urls).containsOnlyKeys(String.valueOf(id));
     }
 
     @Test

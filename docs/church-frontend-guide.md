@@ -301,8 +301,8 @@ async function handleApiError(res: Response): Promise<never> {
 - `GET /api/media/{id}`는 파일 바이트를 반환하며 응답에 `X-Content-Type-Options: nosniff`가 붙는다(MIME 스니핑 기반 저장형 XSS 차단). 관리용 메타 조회(`/api/admin/media/{id}`)와 다르다(6장).
 - **공개 판단 규칙**: 미디어가 **공지·행사·부서 본문, 부서 대표 사진, 부서에 연결된 앨범의 사진, 주보** 중 하나에 쓰이면 공개라서 위처럼 `${NEXT_PUBLIC_API_BASE}/api/media/{id}`만으로 열린다(`Cache-Control: public, max-age=86400`). **설교 본문·갤러리 사진·갤러리 앨범 설명**만 쓰는 미디어는 공개가 아니다. 판단은 요청 시점에 하므로 콘텐츠를 지우거나 연결을 끊으면 바로 바뀐다.
 - **서명 주소**: 비공개 미디어는 서버가 내려주는 서명 주소로만 열린다. 갤러리 앨범 목록의 `thumbnailUrl`, 앨범 상세의 사진별 `url`과 설명 속 `media:{id}`별 `mediaUrls`(`{ "42": "/api/media/42?exp=…&sig=…" }`), 관리자 미디어 응답의 `url`이다. 이 값은 `/api/media/{id}?exp=…&sig=…` 형태이고 **교회 접두사가 없다** — 그대로 `${NEXT_PUBLIC_API_BASE}${url}`로 붙여 쓴다. **1시간**만 유효하니 화면에 오래 두면 목록·상세를 다시 불러 새 주소를 받는다. 앨범 설명의 `media:{id}`는 `mediaUrls`에 있으면 그 값으로, 없으면 `${NEXT_PUBLIC_API_BASE}/api/media/{id}`로 바꾼다.
-- 서명 없이 비공개 미디어를 요청하거나, 서명이 틀리거나 만료됐거나 `exp`·`sig` 중 하나만 있으면 **404 `RESOURCE_NOT_FOUND`**다(403이 아니다). 서버의 `MEDIA_ACCESS_ENFORCED`가 꺼진 전환 기간에는 서명 없는 비공개 요청도 200이지만, 켜지면 막히므로 **갤러리 이미지는 반드시 서명 주소로 옮겨 둔다**. 설교 응답은 서명 주소를 내려주지 않으므로, 설교 본문에만 쓰인 이미지는 차단이 켜지면 열리지 않는다(공지·행사·부서·주보에도 쓰인 이미지는 공개라 열린다).
-- **`next/image` 주의**: 서명 주소는 쿼리 문자열이 있다. `images.remotePatterns`에 `search`를 지정하지 않아야(생략하면 쿼리 모두 허용) 통과한다. 또 서명이 매번 바뀌므로 이미지 최적화 캐시가 주소마다 따로 쌓인다 — 서명 주소 이미지는 `unoptimized`로 쓰는 편이 안전하다.
+- 서명 없이 비공개 미디어를 요청하거나, 서명이 틀리거나 만료됐거나 `exp`·`sig` 중 하나만 있으면 **404 `RESOURCE_NOT_FOUND`**다(403이 아니다). 서버의 `MEDIA_ACCESS_ENFORCED`가 꺼진 전환 기간에는 서명 없는 비공개 요청도 200이지만, 켜지면 막히므로 **갤러리 이미지는 반드시 서명 주소로 옮겨 둔다**. 설교 응답은 서명 주소를 내려주지 않으므로, 설교 본문에만 쓰인 이미지는 차단이 켜지면 열리지 않는다(공지·행사·부서·주보에도 쓰인 이미지는 공개라 열린다). 이는 설교 본문을 회원 전용 콘텐츠로 본 결정에 따른 것이므로, **차단이 켜져 있는 동안 설교 본문에는 이미지를 넣지 않는다**.
+- **`next/image` 주의(권장 사항 — 프론트의 Next.js 버전에서 확인할 것)**: 서명 주소는 쿼리 문자열이 있다. `images.remotePatterns`에 `search`를 지정하지 않으면 쿼리를 모두 허용하는 것으로 알려져 있다. 또 서명이 매번 바뀌므로 이미지 최적화 캐시가 주소마다 따로 쌓일 수 있어, 서명 주소 이미지는 `unoptimized`로 쓰는 편을 권한다. 둘 다 실제 프론트에서 동작을 확인한 뒤 적용한다.
 - **치환 순서**: 마크다운 파싱 후 sanitize까지 끝낸 다음 `media:{id}`를 URL로 바꾸거나, sanitize 단계에서 허용 스킴/도메인을 통제하라. 어느 쪽이든 **새니타이즈는 반드시 거친다.**
 
 ### 5.3 스니펫: `media:{id}` → URL 치환 + DOMPurify 새니타이즈
@@ -359,7 +359,7 @@ function renderMarkdown(raw: string): string {
 
 ### 6.5 사진 완전히 내리기
 
-공개 사진을 내리려면 연결을 끊고 라이브러리에서 지운다. ① 부서 대표 사진이면 `PATCH /api/admin/departments/{id}`로 `heroMediaId: null`, 앨범 사진이면 앨범에서 그 사진을 제거(연결된 앨범을 부서에서 떼려면 `albumId: null`), 본문에 넣었으면 본문에서 지운다. ② `DELETE /api/admin/media/{id}`로 라이브러리에서 삭제한다(참조가 0이라 이제 통과한다). ③ 이후 그 주소는 404다. 다만 이미 받은 브라우저는 `Cache-Control` 때문에 **최대 1일** 그림을 계속 보여 줄 수 있다.
+공개 사진을 내리려면 연결을 끊고 라이브러리에서 지운다. ① 부서 대표 사진이면 `PATCH /api/admin/departments/{id}`로 `{ "version": <현재 version>, "heroMediaId": null }`(`version`은 필수), 앨범 사진이면 앨범에서 그 사진을 제거(연결된 앨범을 부서에서 떼려면 `albumId: null`), 본문에 넣었으면 본문에서 지운다. ② `DELETE /api/admin/media/{id}`로 라이브러리에서 삭제한다(참조가 0이라 이제 통과한다). ③ 이후 그 주소는 404다. 다만 이미 받은 브라우저는 `Cache-Control` 때문에 **최대 1일** 그림을 계속 보여 줄 수 있다.
 
 주의: **부서에 앨범을 연결하면 그 앨범의 모든 사진이 공개**가 된다. 회원 전용 갤러리 앨범을 부서에 연결할 때 공개해도 되는 사진인지 확인한다.
 
@@ -433,7 +433,7 @@ async function saveWithRetry(id: number, edit: (cur: Detail) => UpdateReq) {
 | **sermon** | `preachedAt,desc` | `preacher`·`series`(완전일치)·`from`/`to`·`q`·`tagId` | id·title·preacher·series·scripture·preachedAt·viewCount·tags·author | O(create/update/patch) | 조회 공개, 쓰기 `SERMON_WRITE` | `content` (+videoUrl·audioUrl 외부링크) |
 | **notice** | `isPinned,desc` + `createdAt,desc` | `q`(**제목만**)·`tagId` | id·title·isPinned·viewCount·createdAt·tags·author | O | 조회 공개, 쓰기 `NOTICE_WRITE` | `content` |
 | **event** | `startAt,asc` | `year`+`month` **또는** `startDate`+`endDate`(쌍 필수)·`tagId` | id·title·location·startAt·endAt·allDay·tags (**author·viewCount 없음**) | O(태그만 수정 시 version 불변) | 조회 공개, 쓰기 `EVENT_WRITE` | `description` |
-| **department** | `sortOrder,id`(**비페이징 평배열**) | 없음 | id·name·leader·parentId·sortOrder (**author·tags·viewCount 없음**) | **X**(태그 없음) | 조회 공개, 쓰기 `DEPT_WRITE` | `description` |
+| **department** | `sortOrder,id`(**비페이징 평배열**) | 없음 | id·name·leader·parentId·sortOrder·heroMediaId (**author·tags·viewCount 없음**) | **X**(태그 없음) | 조회 공개, 쓰기 `DEPT_WRITE` | `description` |
 | **main** | 고정(설교3·공지3·일정5) | 없음 | 세 도메인 카드 메타(본문 제외) | — | **공개**(Redis 캐시, 콘텐츠 CUD 시 무효화) | — |
 | **media** | `createdAt,desc`(admin) | `type`·`from`/`to` | 메타 + 서명 주소 `url` | — | 관리 `MEDIA_MANAGE`, **서빙 `/api/media/{id}`는 공개 콘텐츠에 쓰인 것만 공개(5.2)** | — |
 | **gallery** | `createdAt,desc` | `tagId` | id·title·thumbnailMediaId(첫 사진, 없으면 null)·**thumbnailUrl(서명 주소, 없으면 null)**·photoCount·createdAt·tags·author | O(앨범, 태그만 수정 시 version 불변) | **`GALLERY_VIEW` 회원전용**, 쓰기 `GALLERY_WRITE` | 앨범 `description` |

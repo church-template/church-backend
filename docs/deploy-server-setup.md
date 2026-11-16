@@ -181,8 +181,14 @@ Actions의 Deploy를 `image_tag`에 현재 버전을 넣어 실행한다.
 
 1. 백엔드를 `MEDIA_ACCESS_ENFORCED=false`(기본) 그대로 배포한다.
 2. **모든 교회 프론트**를 서명 주소(`${NEXT_PUBLIC_API_BASE}${url}`)를 쓰는 버전으로 배포하고 갤러리 이미지가 뜨는지 확인한다.
-3. 서버 `/srv/church-backend/.env`에 `MEDIA_ACCESS_ENFORCED=true`를 추가하고, Actions의 Deploy를 **현재 `image_tag`**로 다시 실행한다(위와 같이 서버에서 compose를 직접 실행하지 않는다).
-4. 확인: 서명 없이 갤러리에만 쓰인 미디어를 요청하면 404여야 한다(`curl -i https://api.<교회도메인>/church/<slug>/api/media/<id>`).
+3. **설교 본문 점검**(켜기 전 필수). 설교 응답은 서명 주소를 내려주지 않고 설교 본문은 공개 근거도 아니므로, 설교 본문에 이미지가 있으면 켠 뒤 404가 된다. 서버에서 실행해 결과가 **0행**인지 본다.
+   ```bash
+   docker exec -it church-backend-postgres-1 psql -U <DB_USERNAME> -d <DB_NAME> \
+     -c "select church_id, count(*) from sermons where deleted_at is null and content ~ 'media:[0-9]' group by church_id;"
+   ```
+   행이 나오면 **켜지 않는다.** 해당 설교 본문에서 이미지를 빼거나, 먼저 설교 응답에 서명 주소를 내려주도록 백엔드를 확장(후속 작업)한 뒤 켠다.
+4. 서버 `/srv/church-backend/.env`에 `MEDIA_ACCESS_ENFORCED=true`를 추가하고, Actions의 Deploy를 **현재 `image_tag`**로 다시 실행한다(위와 같이 서버에서 compose를 직접 실행하지 않는다).
+5. 확인: 서명 없이 갤러리에만 쓰인 미디어를 요청하면 404여야 한다(`curl -i https://api.<교회도메인>/church/<slug>/api/media/<id>`).
 
 되돌리려면 값을 `false`로 바꾸고 같은 방식으로 Deploy를 다시 실행한다.
 

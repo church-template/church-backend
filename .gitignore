@@ -58,3 +58,4 @@ docs/superpowers/
 
 ### Archify (다이어그램 원본·검증 산출물) ###
 .archify/
+.playwright-mcp/

@@ -58,6 +58,9 @@ class NewChurchScriptTest {
                 .update();
         jdbc.sql("delete from members where church_id = ?").param(churchId).update();
         jdbc.sql("delete from roles where church_id = ?").param(churchId).update(); // role_permissions는 CASCADE
+        jdbc.sql("delete from content_visibility where church_id = ?")
+                .param(churchId)
+                .update();
         jdbc.sql("delete from churches where id = ?").param(churchId).update();
     }
 
@@ -134,6 +137,18 @@ class NewChurchScriptTest {
                         .query(String.class)
                         .list())
                 .containsExactly("01088880001:true:true:true"); // 전화번호는 숫자만
+    }
+
+    @Test
+    void script_seeds_new_church_visibility_with_only_gallery_members() throws Exception {
+        // 새 교회 기본값(#95 설계 5.2): 기존 교회와 달리 설교도 누구나다.
+        runScript();
+        assertThat(jdbc.sql("select domain || ':' || level from content_visibility where church_id = ? order by domain")
+                        .param(churchId())
+                        .query(String.class)
+                        .list())
+                .containsExactly(
+                        "BULLETIN:PUBLIC", "EVENT:PUBLIC", "GALLERY:MEMBERS", "NOTICE:PUBLIC", "SERMON:PUBLIC");
     }
 
     @Test

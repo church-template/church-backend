@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.List;
 
-/** 설교 전체 수정(PUT) 요청. version은 낙관락 비교용 필수. null 필드는 해당 컬럼을 비운다. */
+/** 설교 전체 수정(PUT) 요청. version은 낙관락 비교용 필수. null 필드는 해당 컬럼을 비운다(단 membersOnly null → 유지). */
 public record SermonUpdateRequest(
         @NotBlank @Size(max = 200) String title,
         @NotBlank @Size(max = 100) String preacher,
@@ -17,4 +17,5 @@ public record SermonUpdateRequest(
         @Size(max = 500) String audioUrl,
         @NotNull LocalDate preachedAt,
         List<Long> tagIds,
+        Boolean membersOnly,
         @NotNull Long version) {}

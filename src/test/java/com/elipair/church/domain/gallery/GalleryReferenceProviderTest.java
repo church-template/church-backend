@@ -1,8 +1,10 @@
 package com.elipair.church.domain.gallery;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import com.elipair.church.TestcontainersConfiguration;
+import com.elipair.church.domain.visibility.VisibilityService;
 import com.elipair.church.global.common.ContentRef;
 import com.elipair.church.global.config.JpaConfig;
 import java.util.List;
@@ -31,8 +33,8 @@ class GalleryReferenceProviderTest {
 
     @BeforeEach
     void init() {
-        albumProvider = new GalleryAlbumReferenceProvider(albumRepository);
-        photoProvider = new GalleryPhotoReferenceProvider(photoRepository);
+        albumProvider = new GalleryAlbumReferenceProvider(albumRepository, mock(VisibilityService.class));
+        photoProvider = new GalleryPhotoReferenceProvider(photoRepository, mock(VisibilityService.class));
     }
 
     @Test

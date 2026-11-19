@@ -1,8 +1,10 @@
 package com.elipair.church.domain.notice;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import com.elipair.church.TestcontainersConfiguration;
+import com.elipair.church.domain.visibility.VisibilityService;
 import com.elipair.church.global.common.ContentRef;
 import com.elipair.church.global.config.JpaConfig;
 import java.util.List;
@@ -27,7 +29,7 @@ class NoticeReferenceProviderTest {
 
     @BeforeEach
     void init() {
-        provider = new NoticeReferenceProvider(repository);
+        provider = new NoticeReferenceProvider(repository, mock(VisibilityService.class));
     }
 
     private Notice withBody(String title, String body) {

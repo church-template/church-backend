@@ -4,6 +4,8 @@
 백엔드 이슈: https://github.com/church-template/church-backend/issues/92
 자세한 API 규칙의 정본은 `docs/church-frontend-guide.md` 5장·6장과 Swagger(`/docs/swagger-ui.html`)다. 이 문서는 "무엇이 바뀌었고 프론트가 무엇을 해야 하는지"만 추린 것이다.
 
+> **#95로 일부 규칙이 바뀌었다(이 문서는 #92 시점 기록).** 공개 여부가 이제 교회의 메뉴 공개 범위와 설교·앨범의 "교인만"을 따르고, 설교·공지·일정 상세는 `mediaUrls`, 주보는 `url`(서명 주소)을 싣는다 — 아래 "설교 본문에는 이미지를 넣지 않는다"는 더 이상 맞지 않는다. 현재 규칙은 `docs/church-frontend-guide.md` 2.3·5.2.
+
 ## 1. 한눈에 보기
 
 | 구분 | 내용 | 프론트 작업 |

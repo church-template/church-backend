@@ -1,8 +1,10 @@
 package com.elipair.church.domain.bulletin;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import com.elipair.church.TestcontainersConfiguration;
+import com.elipair.church.domain.visibility.VisibilityService;
 import com.elipair.church.global.common.ContentRef;
 import com.elipair.church.global.config.JpaConfig;
 import java.time.LocalDate;
@@ -28,7 +30,7 @@ class BulletinReferenceProviderTest {
 
     @BeforeEach
     void init() {
-        provider = new BulletinReferenceProvider(repository);
+        provider = new BulletinReferenceProvider(repository, mock(VisibilityService.class));
     }
 
     @Test

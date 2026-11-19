@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.elipair.church.domain.department.DepartmentRepository;
 import com.elipair.church.domain.gallery.dto.GalleryAlbumCreateRequest;
 import com.elipair.church.domain.gallery.dto.GalleryAlbumPatchRequest;
 import com.elipair.church.domain.media.MediaService;
@@ -36,7 +37,12 @@ class GalleryAlbumServiceTest {
         contentTagService = mock(ContentTagService.class);
         authorDisplayService = mock(AuthorDisplayService.class);
         service = new GalleryAlbumService(
-                repository, photoRepository, contentTagService, authorDisplayService, mock(MediaService.class));
+                repository,
+                photoRepository,
+                contentTagService,
+                authorDisplayService,
+                mock(MediaService.class),
+                mock(DepartmentRepository.class));
         when(contentTagService.getTags(any(), any())).thenReturn(List.of());
         when(authorDisplayService.displayName(any())).thenReturn("관리자");
         when(photoRepository.findByAlbumIdOrderBySortOrderAscIdAsc(any())).thenReturn(List.of());
@@ -54,7 +60,7 @@ class GalleryAlbumServiceTest {
         GalleryAlbum saved = mockAlbum(0L);
         when(repository.save(any(GalleryAlbum.class))).thenReturn(saved);
 
-        service.create(new GalleryAlbumCreateRequest("부활절", "본문", List.of(1L, 2L)));
+        service.create(new GalleryAlbumCreateRequest("부활절", "본문", List.of(1L, 2L), null));
 
         verify(repository).save(any(GalleryAlbum.class));
         verify(contentTagService).replaceLinks(ContentResourceType.GALLERY_ALBUM, 10L, List.of(1L, 2L));
@@ -65,7 +71,7 @@ class GalleryAlbumServiceTest {
         GalleryAlbum a = mockAlbum(3L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(a));
 
-        service.patch(10L, new GalleryAlbumPatchRequest("새제목", null, List.of(5L), 3L));
+        service.patch(10L, new GalleryAlbumPatchRequest("새제목", null, List.of(5L), null, 3L));
 
         verify(contentTagService).replaceLinks(ContentResourceType.GALLERY_ALBUM, 10L, List.of(5L));
         verify(repository).flush();
@@ -76,7 +82,7 @@ class GalleryAlbumServiceTest {
         GalleryAlbum a = mockAlbum(0L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(a));
 
-        service.patch(10L, new GalleryAlbumPatchRequest("새제목", null, null, 0L));
+        service.patch(10L, new GalleryAlbumPatchRequest("새제목", null, null, null, 0L));
 
         verify(contentTagService, never()).replaceLinks(any(), any(), any());
         verify(repository).flush();
@@ -87,7 +93,7 @@ class GalleryAlbumServiceTest {
         GalleryAlbum a = mockAlbum(3L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(a));
 
-        assertThatThrownBy(() -> service.patch(10L, new GalleryAlbumPatchRequest("새제목", null, List.of(5L), 2L)))
+        assertThatThrownBy(() -> service.patch(10L, new GalleryAlbumPatchRequest("새제목", null, List.of(5L), null, 2L)))
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
                         .isEqualTo(ErrorCode.OPTIMISTIC_LOCK_CONFLICT));
         verify(contentTagService, never()).replaceLinks(any(), any(), any());

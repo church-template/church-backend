@@ -19,11 +19,6 @@ public class SecuredTestController {
         return "admin";
     }
 
-    @GetMapping("/api/gallery/ping")
-    public String galleryPing() {
-        return "gallery";
-    }
-
     @GetMapping("/api/bible-challenges/ping")
     public String challengePing() {
         return "challenge";

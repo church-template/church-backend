@@ -1,5 +1,7 @@
 package com.elipair.church.domain.notice;
 
+import com.elipair.church.domain.media.MediaRefs;
+import com.elipair.church.domain.media.MediaService;
 import com.elipair.church.domain.member.AuthorDisplayService;
 import com.elipair.church.domain.notice.dto.NoticeCardResponse;
 import com.elipair.church.domain.notice.dto.NoticeCreateRequest;
@@ -35,16 +37,19 @@ public class NoticeService {
     private final ContentTagService contentTagService;
     private final AuthorDisplayService authorDisplayService;
     private final ViewCountStore viewCountStore;
+    private final MediaService mediaService;
 
     public NoticeService(
             NoticeRepository repository,
             ContentTagService contentTagService,
             AuthorDisplayService authorDisplayService,
-            ViewCountStore viewCountStore) {
+            ViewCountStore viewCountStore,
+            MediaService mediaService) {
         this.repository = repository;
         this.contentTagService = contentTagService;
         this.authorDisplayService = authorDisplayService;
         this.viewCountStore = viewCountStore;
+        this.mediaService = mediaService;
     }
 
     public Page<NoticeCardResponse> list(String q, Long tagId, Pageable pageable) {
@@ -142,6 +147,7 @@ public class NoticeService {
                 n.getUpdatedAt(),
                 n.getVersion(),
                 contentTagService.getTags(TYPE, n.getId()),
-                authorDisplayService.displayName(n.getUpdatedBy()));
+                authorDisplayService.displayName(n.getUpdatedBy()),
+                mediaService.signedUrls(MediaRefs.ids(n.getContent())));
     }
 }

@@ -1,8 +1,10 @@
 package com.elipair.church.domain.sermon;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import com.elipair.church.TestcontainersConfiguration;
+import com.elipair.church.domain.visibility.VisibilityService;
 import com.elipair.church.global.common.ContentRef;
 import com.elipair.church.global.config.JpaConfig;
 import java.time.LocalDate;
@@ -28,7 +30,7 @@ class SermonReferenceProviderTest {
 
     @BeforeEach
     void init() {
-        provider = new SermonReferenceProvider(repository);
+        provider = new SermonReferenceProvider(repository, mock(VisibilityService.class));
     }
 
     private Sermon withBody(String title, String body) {

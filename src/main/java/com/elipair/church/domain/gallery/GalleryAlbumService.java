@@ -1,10 +1,12 @@
 package com.elipair.church.domain.gallery;
 
+import com.elipair.church.domain.department.DepartmentRepository;
 import com.elipair.church.domain.gallery.dto.GalleryAlbumCardResponse;
 import com.elipair.church.domain.gallery.dto.GalleryAlbumCreateRequest;
 import com.elipair.church.domain.gallery.dto.GalleryAlbumDetailResponse;
 import com.elipair.church.domain.gallery.dto.GalleryAlbumPatchRequest;
 import com.elipair.church.domain.gallery.dto.GalleryPhotoResponse;
+import com.elipair.church.domain.media.MediaRefs;
 import com.elipair.church.domain.media.MediaService;
 import com.elipair.church.domain.member.AuthorDisplayService;
 import com.elipair.church.domain.tag.ContentResourceType;
@@ -12,12 +14,11 @@ import com.elipair.church.domain.tag.ContentTagService;
 import com.elipair.church.global.exception.BusinessException;
 import com.elipair.church.global.exception.ErrorCode;
 import com.elipair.church.global.tenant.TenantContext;
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,7 +34,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class GalleryAlbumService {
 
-    private static final Pattern MEDIA_REF = Pattern.compile("media:(\\d{1,18})(?!\\d)");
     private static final ContentResourceType TYPE = ContentResourceType.GALLERY_ALBUM;
 
     private final GalleryAlbumRepository repository;
@@ -41,23 +41,29 @@ public class GalleryAlbumService {
     private final ContentTagService contentTagService;
     private final AuthorDisplayService authorDisplayService;
     private final MediaService mediaService;
+    private final DepartmentRepository departmentRepository;
 
     public GalleryAlbumService(
             GalleryAlbumRepository repository,
             GalleryPhotoRepository photoRepository,
             ContentTagService contentTagService,
             AuthorDisplayService authorDisplayService,
-            MediaService mediaService) {
+            MediaService mediaService,
+            DepartmentRepository departmentRepository) {
         this.repository = repository;
         this.photoRepository = photoRepository;
         this.contentTagService = contentTagService;
         this.authorDisplayService = authorDisplayService;
         this.mediaService = mediaService;
+        this.departmentRepository = departmentRepository;
     }
 
-    public Page<GalleryAlbumCardResponse> list(Long tagId, Pageable pageable) {
+    /** 보는 사람을 읽지 않는다 — 교인 전용 포함 여부·관리자 필터는 컨트롤러가 정해 넘긴다(설계 6.6-1). */
+    public Page<GalleryAlbumCardResponse> list(
+            Long tagId, boolean includeMembersOnly, Boolean membersOnlyFilter, Pageable pageable) {
         List<Long> taggedIds = tagId == null ? null : contentTagService.resourceIdsWithTag(TYPE, tagId);
-        Page<GalleryAlbum> page = repository.findAll(GalleryAlbumSpecifications.filter(taggedIds), pageable);
+        Page<GalleryAlbum> page = repository.findAll(
+                GalleryAlbumSpecifications.filter(taggedIds, includeMembersOnly, membersOnlyFilter), pageable);
 
         List<Long> ids = page.map(GalleryAlbum::getId).getContent();
         Map<Long, List<com.elipair.church.domain.tag.dto.TagResponse>> tagsMap =
@@ -72,6 +78,7 @@ public class GalleryAlbumService {
                 ? Map.of()
                 : photoRepository.countByAlbumIds(ids).stream()
                         .collect(Collectors.toMap(AlbumPhotoCountRow::getAlbumId, AlbumPhotoCountRow::getCount));
+        Set<Long> linked = ids.isEmpty() ? Set.of() : new HashSet<>(departmentRepository.findLinkedAlbumIds(ids));
 
         return page.map(a -> {
             Long thumbId = thumbMap.get(a.getId());
@@ -83,8 +90,24 @@ public class GalleryAlbumService {
                     a.getCreatedAt(),
                     tagsMap.getOrDefault(a.getId(), List.of()),
                     authorMap.getOrDefault(a.getUpdatedBy(), AuthorDisplayService.UNKNOWN),
-                    thumbId == null ? null : mediaService.signedUrl(thumbId));
+                    thumbId == null ? null : mediaService.signedUrl(thumbId),
+                    a.isMembersOnly(),
+                    linked.contains(a.getId()),
+                    a.getVersion());
         });
+    }
+
+    /** 상세 접근 판단용. 없으면 404. */
+    public boolean isMembersOnly(Long id) {
+        return load(id).isMembersOnly();
+    }
+
+    /** DepartmentService용 — 부서에 연결하려는 앨범이 교인 전용인가. 없거나 삭제됐으면 false(존재 검사는 호출자 몫). */
+    public boolean isMembersOnlyAlbum(Long albumId) {
+        return repository
+                .findByIdAndDeletedAtIsNull(albumId)
+                .map(GalleryAlbum::isMembersOnly)
+                .orElse(false);
     }
 
     /** 부서 공개 상세용 — 미삭제 앨범의 사진 mediaId를 앨범 순서(sort_order, id)로. 앨범이 없거나 삭제됐으면 empty. */
@@ -102,7 +125,10 @@ public class GalleryAlbumService {
 
     @Transactional
     public GalleryAlbumDetailResponse create(GalleryAlbumCreateRequest req) {
-        GalleryAlbum album = repository.save(GalleryAlbum.create(req.title(), req.description()));
+        // 새 앨범은 아직 어느 부서에도 연결될 수 없으므로 부서 연결 검사가 필요 없다.
+        GalleryAlbum draft = GalleryAlbum.create(req.title(), req.description());
+        draft.changeMembersOnly(Boolean.TRUE.equals(req.membersOnly())); // 저장 전에 — 저장 뒤 바꾸면 version이 오른다
+        GalleryAlbum album = repository.save(draft);
         contentTagService.replaceLinks(TYPE, album.getId(), req.tagIds());
         return detail(album);
     }
@@ -112,6 +138,13 @@ public class GalleryAlbumService {
         GalleryAlbum album = load(id);
         checkVersion(album, req.version());
         album.applyPatch(req.title(), req.description());
+        if (req.membersOnly() != null) {
+            // 부서 소개는 연결 앨범 사진을 누구에게나 보여 준다 — 교인 전용으로 바꾸면 그 약속이 깨진다(설계 6.2)
+            if (req.membersOnly() && isDepartmentLinked(id)) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "부서 소개에 쓰이는 앨범은 교인 전용으로 바꿀 수 없습니다");
+            }
+            album.changeMembersOnly(req.membersOnly());
+        }
         if (req.tagIds() != null) {
             contentTagService.replaceLinks(TYPE, id, req.tagIds());
         }
@@ -158,18 +191,12 @@ public class GalleryAlbumService {
                 a.getUpdatedAt(),
                 a.getVersion(),
                 photos,
-                mediaService.signedUrls(referencedMediaIds(a.getDescription())));
+                mediaService.signedUrls(MediaRefs.ids(a.getDescription())),
+                a.isMembersOnly(),
+                isDepartmentLinked(a.getId()));
     }
 
-    private static List<Long> referencedMediaIds(String description) {
-        if (description == null) {
-            return List.of();
-        }
-        Matcher m = MEDIA_REF.matcher(description);
-        List<Long> ids = new ArrayList<>();
-        while (m.find()) {
-            ids.add(Long.valueOf(m.group(1)));
-        }
-        return ids;
+    private boolean isDepartmentLinked(Long albumId) {
+        return !departmentRepository.findLinkedAlbumIds(List.of(albumId)).isEmpty();
     }
 }

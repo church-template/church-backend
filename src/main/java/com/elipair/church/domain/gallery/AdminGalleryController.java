@@ -40,7 +40,7 @@ public class AdminGalleryController {
                     앨범 메타를 생성한다. 사진은 별도 사진 추가 엔드포인트로 넣는다.
 
                     - 인증(JWT): 필요 — `GALLERY_WRITE`
-                    - 요청 본문: `GalleryAlbumCreateRequest` — `title`(필수)·`description`·`tagIds`
+                    - 요청 본문: `GalleryAlbumCreateRequest` — `title`(필수)·`description`·`tagIds`·`membersOnly`(교인만 보기, 생략 시 false)
                     - 반환값: `GalleryAlbumDetailResponse` — 생성된 앨범 상세(사진 목록 빈 상태), 201 Created
                     - 부수효과: `tagIds`로 태그 연결
                     """)
@@ -54,9 +54,9 @@ public class AdminGalleryController {
 
                     - 인증(JWT): 필요 — `GALLERY_WRITE`
                     - 경로 변수: `id` — 수정할 앨범 ID
-                    - 요청 본문: `GalleryAlbumPatchRequest` — `title`·`description`·`tagIds`(null이면 태그 미변경)·`version`(필수)
+                    - 요청 본문: `GalleryAlbumPatchRequest` — `title`·`description`·`tagIds`(null이면 태그 미변경)·`membersOnly`(null이면 미변경)·`version`(필수)
                     - 반환값: `GalleryAlbumDetailResponse` — 수정된 앨범 상세(`version` 증가분 반영)
-                    - 부수효과: `version` 불일치 시 409 OPTIMISTIC_LOCK_CONFLICT (단, 태그만 변경하면 앨범 행 미변경이라 `version` 유지)
+                    - 부수효과: `version` 불일치 시 409 OPTIMISTIC_LOCK_CONFLICT (단, 태그만 변경하면 앨범 행 미변경이라 `version` 유지) · 부서에 연결된 앨범을 `membersOnly=true`로 바꾸면 400 INVALID_INPUT_VALUE(부서 소개가 누구에게나 보여 준다)
                     """)
     @PatchMapping("/api/admin/gallery/albums/{id}")
     public GalleryAlbumDetailResponse patch(

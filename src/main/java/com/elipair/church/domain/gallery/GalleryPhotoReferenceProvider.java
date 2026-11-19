@@ -1,6 +1,8 @@
 package com.elipair.church.domain.gallery;
 
 import com.elipair.church.domain.media.MediaReferenceProvider;
+import com.elipair.church.domain.visibility.ContentDomain;
+import com.elipair.church.domain.visibility.VisibilityService;
 import com.elipair.church.global.common.ContentRef;
 import com.elipair.church.global.tenant.TenantContext;
 import java.util.List;
@@ -14,9 +16,18 @@ import org.springframework.stereotype.Component;
 class GalleryPhotoReferenceProvider implements MediaReferenceProvider {
 
     private final GalleryPhotoRepository repository;
+    private final VisibilityService visibility;
 
-    GalleryPhotoReferenceProvider(GalleryPhotoRepository repository) {
+    GalleryPhotoReferenceProvider(GalleryPhotoRepository repository, VisibilityService visibility) {
         this.repository = repository;
+        this.visibility = visibility;
+    }
+
+    /** 메뉴가 누구나이고 그 글이 "교인만"이 아닐 때만 공개 근거(설계 6.2). 메뉴를 먼저 봐 닫힌 메뉴는 쿼리를 건너뛴다. */
+    @Override
+    public boolean hasPublicReference(long mediaId) {
+        return visibility.isPublic(ContentDomain.GALLERY)
+                && repository.existsPublicReferenceByMediaId(mediaId, TenantContext.require());
     }
 
     @Override

@@ -10,13 +10,22 @@ import org.springframework.data.jpa.domain.Specification;
 /**
  * 설교 동적 필터(스펙 §5.5). null 인자는 술어에서 제외. 항상 미삭제만(deletedAt IS NULL).
  * taggedIds는 서비스가 ContentTagService로 미리 해석해 넘긴 id 목록 — Specification은 순수 조건 빌더로 유지.
+ * includeMembersOnly=false면 교인 전용 글을 뺀다(보는 사람 판단은 컨트롤러가 해서 넘긴다, #95).
+ * membersOnlyFilter는 관리자용 필터(null=무관).
  */
 final class SermonSpecifications {
 
     private SermonSpecifications() {}
 
     static Specification<Sermon> filter(
-            String preacher, String series, LocalDate from, LocalDate to, String q, List<Long> taggedIds) {
+            String preacher,
+            String series,
+            LocalDate from,
+            LocalDate to,
+            String q,
+            List<Long> taggedIds,
+            boolean includeMembersOnly,
+            Boolean membersOnlyFilter) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.isNull(root.get("deletedAt")));
@@ -39,6 +48,12 @@ final class SermonSpecifications {
                         cb.like(cb.lower(root.get("preacher")), like),
                         cb.like(cb.lower(root.get("series")), like),
                         cb.like(cb.lower(root.get("scripture")), like)));
+            }
+            if (!includeMembersOnly) {
+                predicates.add(cb.isFalse(root.get("membersOnly")));
+            }
+            if (membersOnlyFilter != null) {
+                predicates.add(cb.equal(root.get("membersOnly"), membersOnlyFilter));
             }
             if (taggedIds != null) {
                 predicates.add(

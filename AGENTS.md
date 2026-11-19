@@ -19,7 +19,7 @@
 
 ## 핵심 불변식 (요약 — 상세는 `.claude/rules/`의 각 파일이 정본)
 
-- **멀티테넌시**: 19개 테이블에 `church_id`(`BaseTimeEntity`의 `@TenantId`, `ContentTag`는 직접 선언;
+- **멀티테넌시**: 20개 테이블에 `church_id`(`BaseTimeEntity`의 `@TenantId`, `ContentTag`는 직접 선언;
   `permissions`·`role_permissions`·`member_roles`는 없음). 새 테이블은 `church_id` 필수, 유니크는 `(church_id, …)`.
   **네이티브 쿼리는 자동 필터되지 않는다 — `church_id = :churchId` 필수**(`NativeQueryChurchIdTest`).
   교회 없는 DB 접근은 예외(fail-closed, 기본·루트 테넌트 금지). 요청 밖 코드는 `TenantContext.runAs`를
@@ -28,8 +28,11 @@
   `@PreAuthorize("hasAuthority('SERMON_WRITE')")` — role·직분으로 검사 금지. 역할 priority 계층 가드
   (부여는 strictly-below, 역할 수정은 at-or-below, 역할의 priority를 정할 때(생성·변경)는 strictly-below, 관리자가 다른 회원을 수정·직분 지정·비밀번호 초기화할 때는
   대상 최고 priority ≤ 요청자 maxPriority). 역할·직분과 "마지막 SUPER_ADMIN" 집계는 교회 단위. → `rbac-authorization.md`
-- **경로 인가**: `/api/admin/**` 인증+메서드 권한 · `/api/gallery/**`·`/api/bible-challenges/**`·`/api/sermons/**`·`/api/vehicle-runs/**`
-  회원전용(각 `GALLERY_VIEW`/`CHALLENGE_PARTICIPATE`/`SERMON_VIEW`/`VEHICLE_APPLY`) · 나머지 public(`/api/main` 포함, 의도적; `/api/media/{id}`는 공개 콘텐츠에 쓰인 미디어만 공개, 나머지는 서명 주소).
+- **경로 인가**: `/api/admin/**` 인증+메서드 권한 · `/api/bible-challenges/**`·`/api/vehicle-runs/**`
+  회원전용(각 `CHALLENGE_PARTICIPATE`/`VEHICLE_APPLY`) · 나머지 매처는 public. 단 공지·일정·주보·설교·갤러리 읽기는 교회별 공개 범위
+  설정(`content_visibility`, `PUBLIC`·`MEMBERS`)과 설교·앨범의 `membersOnly`를 따라 컨트롤러의 `ContentAccessGuard`가 판단(#95 — `MEMBERS`면
+  `*_VIEW` 없을 때 401/403, 무효 토큰은 `PUBLIC`이어도 401). `/api/main`은 public이되 방문자 기준으로 고른다.
+  `/api/media/{id}`는 지금 누구나 볼 수 있는 글에 쓰인 미디어만 공개, 나머지는 서명 주소.
   교회 접두사 `/church/{slug}`는 `TenantFilter`가 매처보다 먼저 떼므로 매처·컨트롤러 경로는 `/api/**` 그대로.
   정본: `SecurityConfig` 매처 체인. → `rbac-authorization.md`
 - **JWT**: `sub`=member uuid(BIGINT id 금지), payload는 평탄화된 permissions+maxPriority+`cid`(교회 id).
@@ -39,7 +42,8 @@
 - **API**: RFC 7807 단일 에러 envelope + 정해진 errorCode 표, 목록은 `{content, page{...}}` 페이지 envelope,
   본문 markdown은 raw 저장. → `api-conventions.md`
 - **미디어**: 이미지·PDF는 중앙 `media` 테이블 하나, 본문 참조는 `media:{id}` 문자열(URL 금지),
-  삭제는 참조 있으면 409 차단. `GET /api/media/{id}`는 공개 콘텐츠(공지·행사·부서·주보)에 쓰인 미디어만 공개,
+  삭제는 참조 있으면 409 차단(설정·`membersOnly`와 무관하게 모든 참조). `GET /api/media/{id}`는 지금 누구나 볼 수 있는 글에 쓰인 미디어만 공개
+  (공지·일정·주보 = 메뉴 `PUBLIC`일 때, 설교·갤러리 = 메뉴 `PUBLIC`이고 글이 `membersOnly`가 아닐 때, 부서 = 항상),
   나머지는 서명 주소(`?exp=&sig=`, 1시간, 교회 접두사 없음)이고 `MEDIA_ACCESS_ENFORCED=true`면 서명 없는 비공개 요청은 404. → `media-library.md`
 - **SB4**: web 스타터는 `spring-boot-starter-webmvc`, 테스트는 모듈별 `*-test`. → `spring-boot-4.md`
 

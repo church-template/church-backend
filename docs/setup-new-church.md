@@ -13,6 +13,7 @@
 
 - `churches` 1행 (이름, slug, 프론트 주소)
 - 기본 역할 4종 — `SUPER_ADMIN`(1000) / `ADMIN`(900) / `MEMBER`(100) / `USER`(0)와 역할별 권한
+- **메뉴 공개 범위** 5행(#95) — 공지·일정·주보·설교 = 누구나(`PUBLIC`), 갤러리 = 교인만(`MEMBERS`). 바꾸려면 대표자가 관리 화면 "공개 범위"(`PUT /api/admin/visibility`, `VISIBILITY_MANAGE`)에서 고친다. 기존 교회(은샘·새누리)는 마이그레이션 V21이 설교·갤러리를 교인만으로 넣었으므로 새 교회와 설교 기본값이 다르다.
 - **교회 대표자** 회원 1명 = 그 교회의 `SUPER_ADMIN` (`SUPER_ADMIN`은 API로 부여할 수 없어 이 스크립트가 유일한 생성 경로다)
 
 교회 등록 API·관리 화면은 없다(의도 — 인터넷에 "교회와 최고 관리자를 만드는" 통로를 열지 않는다).
@@ -91,6 +92,7 @@ psql -h 127.0.0.1 -U <DB_USERNAME> -d <DB_NAME> -v ON_ERROR_STOP=1 \
   ```
 - [ ] 그 교회 프론트에서 CORS 통과(로그인·목록이 브라우저에서 동작)
 - [ ] 다른 교회 데이터가 보이지 않음(목록이 비어 있음)
+- [ ] 공개 범위가 기본값: `curl -s https://api.eunsaem.com/church/<slug>/api/visibility` → `{"notices":"PUBLIC","events":"PUBLIC","bulletins":"PUBLIC","sermons":"PUBLIC","gallery":"MEMBERS"}`
 
 ## 6. 알아둘 것
 

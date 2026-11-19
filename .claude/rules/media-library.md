@@ -16,14 +16,22 @@ Bodies embed the literal string `media:{id}` (see [[api-conventions]]); there is
 
 Union of both = the reference list. This is intentional (free image placement anywhere in markdown); the cost is text-search (regex) based tracking.
 
-## Serving: public only if used by public content, else signed URL
+## Serving: public only if used by content anyone can see right now, else signed URL
 
-`GET /api/media/{id}` needs no JWT, but anonymous access depends on what uses the media (decided per request via `MediaReferenceProvider.grantsPublicAccess()`):
+`GET /api/media/{id}` needs no JWT, but anonymous access depends on what uses the media **and** on the church's menu visibility (#95, `content_visibility`) and the per-item `members_only` flag. Decided per request via `MediaReferenceProvider.hasPublicReference(mediaId)`; `MediaService.isPublic` = any provider returns true.
 
-- **Public**: used by a notice/event/department body, a department hero image (`departments.hero_media_id`), a photo of an album linked to a department (`departments.album_id`), or a bulletin → `200` + `Cache-Control: public, max-age=86400`.
-- **Not public**: sermon bodies, gallery photos, gallery album descriptions (members-only content) never make media public. Without a valid signature → `404 RESOURCE_NOT_FOUND` (never 403) when `media.access-enforced` (`MEDIA_ACCESS_ENFORCED`) is true; while it is false (default, cut-over period) → `200` with `private, max-age=86400`.
-- **Signed URL**: `/api/media/{id}?exp={epochSeconds}&sig={base64url}`, no church prefix, valid 3600s, HMAC-SHA256 over `churchId:mediaId:exp` with a key derived from `JWT_SECRET` (`MediaUrlSigner`). Valid → `200` + `private, max-age=<remaining>`; invalid/expired/only one of `exp`/`sig` → 404. Gallery album responses (`thumbnailUrl`, photo `url`, `mediaUrls`) and admin media responses (`url`) hand them out; the frontend builds `${NEXT_PUBLIC_API_BASE}${url}`.
-- Linking an album to a department makes all its photos public. Only reference providers that grant public access may count (department/notice/event/bulletin); new providers default to `false`.
+- **Two questions, two methods — never merge them.** `findReferences` (delete blocking + references listing) returns **every** reference regardless of visibility or `members_only`. `hasPublicReference` (public serving) is the only one that reads settings. Narrowing `findReferences` to "public only" would let members-only content's files be deleted; widening `hasPublicReference` would leak members-only photos. New providers default to `false`.
+- **Public** (`200` + `Cache-Control: public, max-age=86400`) when at least one of:
+  - notice/event body or bulletin PDF, and that menu is `PUBLIC`;
+  - sermon body, sermon menu `PUBLIC`, and that sermon is not `members_only`;
+  - gallery photo or album description, gallery menu `PUBLIC`, and that album is not `members_only`;
+  - department body, department hero image (`departments.hero_media_id`), or a photo of an album linked to a department (`departments.album_id`) — **always** (an album linked to a department can't be `members_only`, and vice versa).
+- A file used by both public and members-only content is public (one public reason is enough).
+- **Not public** otherwise. Without a valid signature → `404 RESOURCE_NOT_FOUND` (never 403) when `media.access-enforced` (`MEDIA_ACCESS_ENFORCED`) is true; while it is false (default, cut-over period) → `200` with `private, max-age=86400`. Closing a menu blocks new requests at once; browsers that already loaded a file may keep it up to 1 day.
+- New `hasPublicReference` native queries carry `church_id = :churchId` and reuse the same `media:{id}($|[^0-9])` regex.
+- **Signed URL**: `/api/media/{id}?exp={epochSeconds}&sig={base64url}`, no church prefix, valid 3600s, HMAC-SHA256 over `churchId:mediaId:exp` with a key derived from `JWT_SECRET` (`MediaUrlSigner`). Valid → `200` + `private, max-age=<remaining>`; invalid/expired/only one of `exp`/`sig` → 404. Handed out by gallery album responses (`thumbnailUrl`, photo `url`, `mediaUrls`), sermon/notice/event detail `mediaUrls`, bulletin card/detail `url`, and admin media responses (`url`); the frontend builds `${NEXT_PUBLIC_API_BASE}${url}`.
+- **`mediaUrls` contract**: every `media:{id}` in the body (`MediaRefs.ids` — digit-boundary, de-duplicated, in order) that exists **in the same church** has a key; other churches' ids and missing ids have none; no media → empty map, never null. The frontend drops images missing from the map.
+- Linking an album to a department makes all its photos public.
 - Taking a photo down: unlink it (clear the hero image / remove it from the album / edit the body) → blocking delete in the library → address is 404 (browsers that loaded it may keep it up to 1 day).
 
 ## Deletion is blocking

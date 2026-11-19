@@ -20,9 +20,10 @@ class DepartmentReferenceProvider implements MediaReferenceProvider {
         this.repository = repository;
     }
 
+    /** 부서 소개는 공개 범위 설정 대상이 아니라 항상 공개다(연결 앨범은 "교인만"이 될 수 없다 — DepartmentService·GalleryAlbumService가 막는다). */
     @Override
-    public boolean grantsPublicAccess() {
-        return true;
+    public boolean hasPublicReference(long mediaId) {
+        return !findReferences(mediaId).isEmpty();
     }
 
     @Override

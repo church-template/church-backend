@@ -6,6 +6,9 @@ import com.elipair.church.TestcontainersConfiguration;
 import com.elipair.church.domain.challenge.ChallengeParticipationRepository;
 import com.elipair.church.domain.gallery.GalleryPhotoRepository;
 import com.elipair.church.domain.media.MediaReferenceProvider;
+import com.elipair.church.domain.visibility.VisibilityLevel;
+import com.elipair.church.domain.visibility.VisibilityService;
+import com.elipair.church.domain.visibility.dto.VisibilityUpdateRequest;
 import com.elipair.church.global.common.ContentRef;
 import com.elipair.testfixture.TwoChurches;
 import java.util.List;
@@ -41,6 +44,9 @@ class NativeQueryIsolationTest {
 
     @Autowired
     private ChallengeParticipationRepository participationRepository;
+
+    @Autowired
+    private VisibilityService visibility;
 
     private long mediaB;
     private long albumB;
@@ -136,6 +142,27 @@ class NativeQueryIsolationTest {
         // 본문 5종(설교·공지·일정·부서·앨범) + FK 2종(갤러리 사진·주보)
         assertThat(churches.inB(() -> references(mediaB))).hasSize(7);
         assertThat(churches.inA(() -> references(mediaB))).isEmpty();
+    }
+
+    @Test
+    void public_reference_check_does_not_see_other_church_content() {
+        VisibilityLevel pub = VisibilityLevel.PUBLIC;
+        // B의 5개 메뉴를 모두 열어 공개 판단 쿼리 7종이 전부 B에서는 참이 되게 한다
+        churches.inB(() -> visibility.update(new VisibilityUpdateRequest(pub, pub, pub, pub, pub)));
+        try {
+            assertThat(churches.inB(() -> referenceProviders.stream()
+                            .filter(p -> p.hasPublicReference(mediaB))
+                            .count()))
+                    .isEqualTo(7);
+            assertThat(churches.inA(() -> referenceProviders.stream()
+                            .filter(p -> p.hasPublicReference(mediaB))
+                            .count()))
+                    .isZero();
+        } finally {
+            // 새 교회 기본값(갤러리만 MEMBERS)으로 되돌린다 — 같은 컨텍스트의 다른 테스트가 B를 쓴다
+            VisibilityLevel mem = VisibilityLevel.MEMBERS;
+            churches.inB(() -> visibility.update(new VisibilityUpdateRequest(pub, pub, pub, pub, mem)));
+        }
     }
 
     @Test

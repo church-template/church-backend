@@ -19,9 +19,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * access 토큰을 검증해 SecurityContext에 권한을 부여한다(스펙 §4.3).
  * 토큰이 없거나(공개 경로 통과), 만료·위변조·refresh-type·블랙리스트면 컨텍스트를 비워 둔다 —
- * 보호 경로면 이후 EntryPoint가 401 INVALID_TOKEN으로 응답한다.
+ * 보호 경로면 이후 EntryPoint가 401 INVALID_TOKEN으로 응답한다. 토큰이 왔는데 무효면 {@link #INVALID_TOKEN_ATTRIBUTE}를 남긴다.
  */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    /**
+     * 비어 있지 않은 토큰이 왔는데 인증을 세우지 못했다는 요청 표시(#95). 공개 경로는 그대로 통과시키되,
+     * 메뉴 공개 범위를 판단하는 쪽이 이 표시를 보고 401 INVALID_TOKEN을 준다.
+     */
+    public static final String INVALID_TOKEN_ATTRIBUTE = JwtAuthenticationFilter.class.getName() + ".INVALID_TOKEN";
 
     private static final String HEADER = "Authorization";
     private static final String BEARER = "Bearer ";
@@ -50,9 +56,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 boolean sameChurch = tokenChurch != null && tokenChurch.equals(TenantContext.currentOrNull());
                 if (isAccess && sameChurch && jti != null && !tokenBlacklist.isBlacklisted(jti)) {
                     SecurityContextHolder.getContext().setAuthentication(toAuthentication(claims));
+                } else {
+                    request.setAttribute(INVALID_TOKEN_ATTRIBUTE, Boolean.TRUE);
                 }
             } catch (JwtException | IllegalArgumentException ignored) {
                 // 유효하지 않은 토큰 — 컨텍스트를 비워 둔다(보호 경로면 EntryPoint가 401 처리).
+                request.setAttribute(INVALID_TOKEN_ATTRIBUTE, Boolean.TRUE);
             }
         }
         chain.doFilter(request, response);
@@ -61,7 +70,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private String resolveToken(HttpServletRequest request) {
         String header = request.getHeader(HEADER);
         if (header != null && header.startsWith(BEARER)) {
-            return header.substring(BEARER.length());
+            // 빈 "Bearer "는 토큰 없음이다 — 기존 프론트가 비로그인일 때 이 값을 보내므로 무효 토큰(401)으로 보지 않는다(설계 6.6-3).
+            String token = header.substring(BEARER.length()).strip();
+            return token.isEmpty() ? null : token;
         }
         return null;
     }

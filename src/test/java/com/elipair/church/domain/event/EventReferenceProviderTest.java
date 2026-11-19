@@ -1,8 +1,10 @@
 package com.elipair.church.domain.event;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import com.elipair.church.TestcontainersConfiguration;
+import com.elipair.church.domain.visibility.VisibilityService;
 import com.elipair.church.global.common.ContentRef;
 import com.elipair.church.global.config.JpaConfig;
 import java.time.LocalDateTime;
@@ -28,7 +30,7 @@ class EventReferenceProviderTest {
 
     @BeforeEach
     void init() {
-        provider = new EventReferenceProvider(repository);
+        provider = new EventReferenceProvider(repository, mock(VisibilityService.class));
     }
 
     private Event withBody(String title, String body) {

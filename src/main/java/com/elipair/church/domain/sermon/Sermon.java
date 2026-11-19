@@ -54,6 +54,10 @@ public class Sermon extends BaseEntity {
     @Column(name = "view_count", nullable = false)
     private long viewCount;
 
+    /** 글 단위 "교인만"(#95). 메뉴 설정과 독립이라 메뉴를 바꿔도 지워지지 않는다. */
+    @Column(name = "members_only", nullable = false)
+    private boolean membersOnly;
+
     private Sermon(
             String title,
             String preacher,
@@ -104,6 +108,10 @@ public class Sermon extends BaseEntity {
         this.videoUrl = videoUrl;
         this.audioUrl = audioUrl;
         this.preachedAt = preachedAt;
+    }
+
+    public void changeMembersOnly(boolean membersOnly) {
+        this.membersOnly = membersOnly;
     }
 
     /** PATCH 부분 수정 — null 인자는 미변경(nullable 컬럼을 null로 '비우기'는 PUT으로). */

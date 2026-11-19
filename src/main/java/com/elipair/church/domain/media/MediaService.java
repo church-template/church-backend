@@ -190,11 +190,9 @@ public class MediaService {
         return new MediaContent(resource, media.getMimeType(), media.getFilename(), cacheControl);
     }
 
-    /** 공개 근거(공지·행사·부서·주보) 참조가 하나라도 있으면 true. 익명 요청마다 도므로 해당 provider만, 첫 적중에서 멈춘다. */
+    /** 공개 근거가 하나라도 있으면 true(공개 글과 교인 전용 글이 함께 쓰면 공개, 설계 6.2). 익명 요청마다 도므로 첫 적중에서 멈춘다. */
     public boolean isPublic(long mediaId) {
-        return referenceProviders.stream()
-                .filter(MediaReferenceProvider::grantsPublicAccess)
-                .anyMatch(provider -> !provider.findReferences(mediaId).isEmpty());
+        return referenceProviders.stream().anyMatch(provider -> provider.hasPublicReference(mediaId));
     }
 
     public MediaReferencesResponse references(Long id) {

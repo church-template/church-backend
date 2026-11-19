@@ -1,5 +1,7 @@
 package com.elipair.church.domain.sermon;
 
+import com.elipair.church.domain.media.MediaRefs;
+import com.elipair.church.domain.media.MediaService;
 import com.elipair.church.domain.member.AuthorDisplayService;
 import com.elipair.church.domain.sermon.dto.SermonCardResponse;
 import com.elipair.church.domain.sermon.dto.SermonCreateRequest;
@@ -35,23 +37,37 @@ public class SermonService {
     private final ContentTagService contentTagService;
     private final AuthorDisplayService authorDisplayService;
     private final ViewCountStore viewCountStore;
+    private final MediaService mediaService;
 
     public SermonService(
             SermonRepository repository,
             ContentTagService contentTagService,
             AuthorDisplayService authorDisplayService,
-            ViewCountStore viewCountStore) {
+            ViewCountStore viewCountStore,
+            MediaService mediaService) {
         this.repository = repository;
         this.contentTagService = contentTagService;
         this.authorDisplayService = authorDisplayService;
         this.viewCountStore = viewCountStore;
+        this.mediaService = mediaService;
     }
 
+    /** 보는 사람을 읽지 않는다 — 교인 전용 포함 여부·관리자 필터는 호출자가 정해 넘긴다(/api/main 캐시 오염 방지, 설계 6.6-1). */
     public Page<SermonCardResponse> list(
-            String preacher, String series, LocalDate from, LocalDate to, String q, Long tagId, Pageable pageable) {
+            String preacher,
+            String series,
+            LocalDate from,
+            LocalDate to,
+            String q,
+            Long tagId,
+            boolean includeMembersOnly,
+            Boolean membersOnlyFilter,
+            Pageable pageable) {
         List<Long> taggedIds = tagId == null ? null : contentTagService.resourceIdsWithTag(TYPE, tagId);
-        Page<Sermon> page =
-                repository.findAll(SermonSpecifications.filter(preacher, series, from, to, q, taggedIds), pageable);
+        Page<Sermon> page = repository.findAll(
+                SermonSpecifications.filter(
+                        preacher, series, from, to, q, taggedIds, includeMembersOnly, membersOnlyFilter),
+                pageable);
 
         List<Long> ids = page.map(Sermon::getId).getContent();
         Map<Long, List<TagResponse>> tagsMap = contentTagService.getTagsByResources(TYPE, ids);
@@ -67,7 +83,14 @@ public class SermonService {
                 s.getPreachedAt(),
                 s.getViewCount(),
                 tagsMap.getOrDefault(s.getId(), List.of()),
-                authorMap.getOrDefault(s.getUpdatedBy(), AuthorDisplayService.UNKNOWN)));
+                authorMap.getOrDefault(s.getUpdatedBy(), AuthorDisplayService.UNKNOWN),
+                s.isMembersOnly(),
+                s.getVersion()));
+    }
+
+    /** 상세 접근 판단용 — 조회수를 올리지 않는다(막힌 요청이 조회수를 올리지 않게, 설계 6.6-5). 없으면 404. */
+    public boolean isMembersOnly(Long id) {
+        return load(id).isMembersOnly();
     }
 
     @Transactional(readOnly = true)
@@ -82,7 +105,7 @@ public class SermonService {
     @CacheEvict(value = "main", allEntries = true)
     @Transactional
     public SermonDetailResponse create(SermonCreateRequest req) {
-        Sermon sermon = repository.save(Sermon.create(
+        Sermon draft = Sermon.create(
                 req.title(),
                 req.preacher(),
                 req.series(),
@@ -90,7 +113,9 @@ public class SermonService {
                 req.content(),
                 req.videoUrl(),
                 req.audioUrl(),
-                req.preachedAt()));
+                req.preachedAt());
+        draft.changeMembersOnly(Boolean.TRUE.equals(req.membersOnly())); // 저장 전에 — 저장 뒤 바꾸면 UPDATE로 version이 오른다
+        Sermon sermon = repository.save(draft);
         contentTagService.replaceLinks(TYPE, sermon.getId(), req.tagIds());
         return detail(sermon);
     }
@@ -109,6 +134,10 @@ public class SermonService {
                 req.videoUrl(),
                 req.audioUrl(),
                 req.preachedAt());
+        // PUT이어도 빠진 membersOnly는 유지 — 이 칸을 모르는 옛 화면의 수정이 교인 전용 설교를 공개로 풀지 않게
+        if (req.membersOnly() != null) {
+            sermon.changeMembersOnly(req.membersOnly());
+        }
         contentTagService.replaceLinks(TYPE, id, req.tagIds());
         repository.flush(); // 버전 UPDATE 즉시 반영 → 응답 version이 post-increment (Notice #13 리뷰 반영)
         return detail(sermon);
@@ -128,6 +157,9 @@ public class SermonService {
                 req.videoUrl(),
                 req.audioUrl(),
                 req.preachedAt());
+        if (req.membersOnly() != null) {
+            sermon.changeMembersOnly(req.membersOnly());
+        }
         if (req.tagIds() != null) {
             contentTagService.replaceLinks(TYPE, id, req.tagIds());
         }
@@ -175,6 +207,8 @@ public class SermonService {
                 s.getUpdatedAt(),
                 s.getVersion(),
                 contentTagService.getTags(TYPE, s.getId()),
-                authorDisplayService.displayName(s.getUpdatedBy()));
+                authorDisplayService.displayName(s.getUpdatedBy()),
+                s.isMembersOnly(),
+                mediaService.signedUrls(MediaRefs.ids(s.getContent())));
     }
 }

@@ -1,6 +1,8 @@
 package com.elipair.church.domain.event;
 
 import com.elipair.church.domain.media.MediaReferenceProvider;
+import com.elipair.church.domain.visibility.ContentDomain;
+import com.elipair.church.domain.visibility.VisibilityService;
 import com.elipair.church.global.common.ContentRef;
 import com.elipair.church.global.tenant.TenantContext;
 import java.util.List;
@@ -15,14 +17,18 @@ import org.springframework.stereotype.Component;
 class EventReferenceProvider implements MediaReferenceProvider {
 
     private final EventRepository repository;
+    private final VisibilityService visibility;
 
-    EventReferenceProvider(EventRepository repository) {
+    EventReferenceProvider(EventRepository repository, VisibilityService visibility) {
         this.repository = repository;
+        this.visibility = visibility;
     }
 
+    /** 메뉴가 누구나일 때만 공개 근거가 된다 — 교인만으로 닫으면 본문의 파일도 함께 닫힌다(설계 6.2). */
     @Override
-    public boolean grantsPublicAccess() {
-        return true;
+    public boolean hasPublicReference(long mediaId) {
+        return visibility.isPublic(ContentDomain.EVENT)
+                && !findReferences(mediaId).isEmpty();
     }
 
     @Override

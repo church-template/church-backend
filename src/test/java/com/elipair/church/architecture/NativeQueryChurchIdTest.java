@@ -56,9 +56,9 @@ class NativeQueryChurchIdTest {
     @Test
     void 모든_네이티브_쿼리는_church_id_조건을_가진다() throws Exception {
         List<Method> methods = nativeQueryMethods();
-        // 검사 대상이 0개면 무의미하게 통과한다 — 현재 개수를 고정한다(데이터 쿼리 9 + advisory lock 1).
-        // 네이티브 쿼리를 추가·삭제하면 이 숫자도 함께 고친다.
-        assertThat(methods).hasSize(10);
+        // 검사 대상이 0개면 무의미하게 통과한다 — 현재 개수를 고정한다(데이터 쿼리 12 + advisory lock 1).
+        // 네이티브 쿼리를 추가·삭제하면 이 숫자도 함께 고친다. (#95: 미디어 공개 판단 3개 추가)
+        assertThat(methods).hasSize(13);
         assertThat(methods.stream().flatMap(m -> violations(m).stream()).toList())
                 .isEmpty();
     }

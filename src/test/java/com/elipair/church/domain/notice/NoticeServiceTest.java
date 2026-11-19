@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.elipair.church.domain.media.MediaService;
 import com.elipair.church.domain.member.AuthorDisplayService;
 import com.elipair.church.domain.notice.dto.NoticeCreateRequest;
 import com.elipair.church.domain.notice.dto.NoticePatchRequest;
@@ -37,7 +38,8 @@ class NoticeServiceTest {
         contentTagService = mock(ContentTagService.class);
         authorDisplayService = mock(AuthorDisplayService.class);
         viewCountStore = mock(ViewCountStore.class);
-        service = new NoticeService(repository, contentTagService, authorDisplayService, viewCountStore);
+        service = new NoticeService(
+                repository, contentTagService, authorDisplayService, viewCountStore, mock(MediaService.class));
         when(contentTagService.getTags(any(), any())).thenReturn(List.of());
         when(authorDisplayService.displayName(any())).thenReturn("관리자");
     }

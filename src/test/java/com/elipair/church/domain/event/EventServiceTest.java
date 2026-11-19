@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.elipair.church.domain.event.dto.EventCreateRequest;
 import com.elipair.church.domain.event.dto.EventPatchRequest;
 import com.elipair.church.domain.event.dto.EventUpdateRequest;
+import com.elipair.church.domain.media.MediaService;
 import com.elipair.church.domain.tag.ContentResourceType;
 import com.elipair.church.domain.tag.ContentTagService;
 import com.elipair.church.global.exception.BusinessException;
@@ -34,7 +35,7 @@ class EventServiceTest {
     void init() {
         repository = mock(EventRepository.class);
         contentTagService = mock(ContentTagService.class);
-        service = new EventService(repository, contentTagService);
+        service = new EventService(repository, contentTagService, mock(MediaService.class));
         when(contentTagService.getTags(any(), any())).thenReturn(List.of());
     }
 

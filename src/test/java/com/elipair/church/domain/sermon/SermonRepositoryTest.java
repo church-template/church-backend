@@ -78,19 +78,27 @@ class SermonRepositoryTest {
 
         assertThat(repository
                         .findAll(
-                                SermonSpecifications.filter("김목사", null, null, null, null, null), PageRequest.of(0, 10))
+                                SermonSpecifications.filter("김목사", null, null, null, null, null, true, null),
+                                PageRequest.of(0, 10))
                         .getTotalElements())
                 .isEqualTo(2);
         assertThat(repository
                         .findAll(
-                                SermonSpecifications.filter(null, "시리즈1", null, null, null, null),
+                                SermonSpecifications.filter(null, "시리즈1", null, null, null, null, true, null),
                                 PageRequest.of(0, 10))
                         .getTotalElements())
                 .isEqualTo(2);
         assertThat(repository
                         .findAll(
                                 SermonSpecifications.filter(
-                                        null, null, LocalDate.of(2026, 2, 1), LocalDate.of(2026, 2, 28), null, null),
+                                        null,
+                                        null,
+                                        LocalDate.of(2026, 2, 1),
+                                        LocalDate.of(2026, 2, 28),
+                                        null,
+                                        null,
+                                        true,
+                                        null),
                                 PageRequest.of(0, 10))
                         .getTotalElements())
                 .isEqualTo(1);
@@ -105,7 +113,9 @@ class SermonRepositoryTest {
 
         // title 1건 + preacher 1건 = 2건이 "은혜"로 매칭
         assertThat(repository
-                        .findAll(SermonSpecifications.filter(null, null, null, null, "은혜", null), PageRequest.of(0, 10))
+                        .findAll(
+                                SermonSpecifications.filter(null, null, null, null, "은혜", null, true, null),
+                                PageRequest.of(0, 10))
                         .getTotalElements())
                 .isEqualTo(2);
     }
@@ -120,19 +130,22 @@ class SermonRepositoryTest {
 
         assertThat(repository
                         .findAll(
-                                SermonSpecifications.filter(null, null, null, null, null, List.of()),
+                                SermonSpecifications.filter(null, null, null, null, null, List.of(), true, null),
                                 PageRequest.of(0, 10))
                         .getTotalElements())
                 .isZero();
         assertThat(repository
                         .findAll(
-                                SermonSpecifications.filter(null, null, null, null, null, List.of(s.getId())),
+                                SermonSpecifications.filter(
+                                        null, null, null, null, null, List.of(s.getId()), true, null),
                                 PageRequest.of(0, 10))
                         .getTotalElements())
                 .isEqualTo(1);
         // 삭제건은 어떤 필터로도 안 잡힘
         assertThat(repository
-                        .findAll(SermonSpecifications.filter(null, null, null, null, null, null), PageRequest.of(0, 10))
+                        .findAll(
+                                SermonSpecifications.filter(null, null, null, null, null, null, true, null),
+                                PageRequest.of(0, 10))
                         .getTotalElements())
                 .isEqualTo(1);
     }

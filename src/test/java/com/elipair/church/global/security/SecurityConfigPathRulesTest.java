@@ -53,25 +53,7 @@ class SecurityConfigPathRulesTest {
                 .andExpect(status().isOk());
     }
 
-    @Test
-    void gallery_path_without_gallery_view_is_403() throws Exception {
-        mockMvc.perform(get("/api/gallery/ping").header("Authorization", bearer(List.of("SERMON_WRITE"))))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
-    }
-
-    @Test
-    void gallery_path_with_gallery_view_is_200() throws Exception {
-        mockMvc.perform(get("/api/gallery/ping").header("Authorization", bearer(List.of("GALLERY_VIEW"))))
-                .andExpect(status().isOk());
-    }
-
-    @Test
-    void gallery_path_anonymous_is_401_invalid_token() throws Exception {
-        mockMvc.perform(get("/api/gallery/ping"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.errorCode").value("INVALID_TOKEN"));
-    }
+    // 갤러리·설교 경로의 401/403/200은 고정 매처가 아니라 교회 설정을 따른다 — MenuVisibilityApiTest(#95).
 
     @Test
     void challenge_path_without_challenge_participate_is_403() throws Exception {

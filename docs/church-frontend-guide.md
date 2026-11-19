@@ -42,8 +42,8 @@
 이 백엔드에는 **SMTP·이메일 인증이 없다.** 신원 확인은 관리자가 `MEMBER` 역할을 부여하는 것으로 대체된다.
 
 1. `POST /api/auth/signup`(공개, **201**) — 응답에 **토큰 없음**. `SignupResponse`(uuid·name·phone·roles)만. 가입 직후 로그인 상태가 아니므로 **프론트가 별도로 `login`을 호출**해야 한다.
-2. 가입 시 자동으로 `USER` 역할(권한 0)만 부여된다. 갤러리 등 회원 전용 기능은 아직 차단.
-3. 관리자가 `MEMBER` 역할을 부여하면(9장 아님, 7장 회원 관리) **교인 승인** 완료 → `GALLERY_VIEW` 획득.
+2. 가입 시 자동으로 `USER` 역할(권한 0)만 부여된다. "교인만"으로 정한 메뉴·글(2.3)은 아직 차단.
+3. 관리자가 `MEMBER` 역할을 부여하면(9장 아님, 7장 회원 관리) **교인 승인** 완료 → 조회 권한 `NOTICE_VIEW`·`EVENT_VIEW`·`BULLETIN_VIEW`·`SERMON_VIEW`·`GALLERY_VIEW` 획득.
 
 **가입 폼에서 프론트가 미리 막아야 매끄러운 검증**: password ≥ 8자, `termsAgreed`·`privacyAgreed` **둘 다 true**(아니면 400), email은 선택(형식 검증), phone 중복은 서버가 **409 `DUPLICATE_RESOURCE`**.
 
@@ -137,7 +137,8 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
 | `EVENT_WRITE` | 일정 작성/수정/삭제 | `/api/admin/events` |
 | `DEPT_WRITE` | 부서 작성/수정/삭제 | `/api/admin/departments` |
 | `GALLERY_WRITE` | 앨범·사진 생성/수정/삭제 | `/api/admin/gallery/**` |
-| `GALLERY_VIEW` | **갤러리 조회 자체**(회원 전용) | `/api/gallery/**` |
+| `NOTICE_VIEW`·`EVENT_VIEW`·`BULLETIN_VIEW`·`SERMON_VIEW`·`GALLERY_VIEW` | 그 메뉴가 **교인만**일 때의 조회, 메뉴가 누구나일 때 교인만 표시된 설교·앨범 조회(2.3) | `/api/notices`·`/api/events`·`/api/bulletins`·`/api/sermons`·`/api/gallery` |
+| `VISIBILITY_MANAGE` | 메뉴 공개 범위 설정 화면 | `PUT /api/admin/visibility` |
 | `BULLETIN_WRITE` | 주보 업로드/수정/삭제 | `/api/admin/bulletins` |
 | `MEDIA_MANAGE` | 미디어 라이브러리(업로드/목록/삭제) | `/api/admin/media` |
 | `TAG_MANAGE` | 태그 추가/수정/삭제 | `/api/admin/tags` |
@@ -145,17 +146,33 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
 | `MEMBER_MANAGE` | 회원 조회·수정·비번초기화, 약관 일괄리셋 | `/api/members`(조회), `/api/admin/members/{uuid}`, `/api/admin/agreements/reset` |
 | `ROLE_MANAGE` | 역할/권한 관리, 회원 역할 부여/회수 | `/api/admin/roles`, `/api/admin/permissions`, `/api/admin/members/{uuid}/roles` |
 
-> **주의 — 경로만 보면 헷갈리는 곳**: 회원 조회 `GET /api/members`·`GET /api/members/{uuid}`는 `/api/admin/**`가 아니지만 **`MEMBER_MANAGE`로 메서드 보안**이 걸려 있다(경로 규칙상 공개로 보여도 실제 차단). 반대로 `GET /api/positions`, `GET /api/tags`, `GET /api/bulletins`, `GET /api/main`은 **공개**다. `GET /api/media/{id}`는 JWT가 필요 없지만 **공개 콘텐츠에 쓰인 미디어만** 익명에게 열린다(5.2).
+> **주의 — 경로만 보면 헷갈리는 곳**: 회원 조회 `GET /api/members`·`GET /api/members/{uuid}`는 `/api/admin/**`가 아니지만 **`MEMBER_MANAGE`로 메서드 보안**이 걸려 있다(경로 규칙상 공개로 보여도 실제 차단). 반대로 `GET /api/positions`, `GET /api/tags`, `GET /api/visibility`, `GET /api/main`은 **공개**다. 공지·일정·주보·설교·갤러리는 교회 설정에 따른다(2.3). `GET /api/media/{id}`는 JWT가 필요 없지만 **지금 누구나 볼 수 있는 글에 쓰인 미디어만** 익명에게 열린다(5.2).
 
-### 2.3 경로 인가 3분법
+### 2.3 경로 인가 — 고정 규칙 + 메뉴 공개 범위(#95)
 
 | 경로 | 규칙 | UI 함의 |
 |---|---|---|
 | `/api/admin/**` | **로그인만**(경로) + **메서드 `@PreAuthorize`**(권한) 2단 방어 | 로그인했어도 권한 없으면 403; 토큰 없이 호출 시 401 `INVALID_TOKEN` |
-| `/api/gallery/**` | **`GALLERY_VIEW` 필요**(회원 전용, 비공개) | 비로그인·`USER`만 보유 사용자는 차단 |
+| `/api/bible-challenges/**`·`/api/vehicle-runs/**` | `CHALLENGE_PARTICIPATE`·`VEHICLE_APPLY`(고정) | 비로그인·`USER`만 보유 사용자는 차단 |
+| `/api/notices`·`/api/events`·`/api/bulletins`·`/api/sermons`·`/api/gallery` 읽기 | **교회 설정에 따름** — 아래 표 | `GET /api/visibility`로 메뉴마다 게이트를 켤지 정한다 |
 | 그 외 `/api/**` 읽기 | 공개 | 비로그인 노출 가능 |
 
-**갤러리 회원전용 차단 UX**: 갤러리 진입 시 토큰/`/members/me`에 `GALLERY_VIEW`가 없으면, 호출하지 말고 "교인 승인 후 이용 가능" 안내를 띄운다. 그대로 호출하면 비로그인은 401 `INVALID_TOKEN`, 로그인+권한없음은 403 `ACCESS_DENIED`.
+**메뉴 공개 범위**: `GET /api/visibility`(공개) → `{ "notices": "PUBLIC", "events": "PUBLIC", "bulletins": "PUBLIC", "sermons": "MEMBERS", "gallery": "MEMBERS" }`(값은 `PUBLIC`=누구나, `MEMBERS`=교인만). 저장은 `PUT /api/admin/visibility`(`VISIBILITY_MANAGE`, 5개 값을 모두 보낸다 — 빠지면 400, 마지막 저장이 이긴다). 기본값: 기존 교회(은샘·새누리) = 설교·갤러리 교인만, 나머지 누구나 / 새 교회 = 갤러리만 교인만.
+
+| 메뉴 | 글 `membersOnly`(설교·앨범만) | 조회 권한(`*_VIEW`) 없음 | 있음 |
+|---|---|---|---|
+| `MEMBERS` | (무관) | 목록·상세: 비로그인 **401 `INVALID_TOKEN`**, 로그인했는데 권한 없음 **403 `ACCESS_DENIED`** | 전부 |
+| `PUBLIC` | false | 봄 | 봄 |
+| `PUBLIC` | true | **목록에서 빠진다**(`totalElements`에도 안 셈), 상세는 401/403 | 봄 + `membersOnly: true` |
+
+- **401 = "로그인하면 볼 수 있다"**, **403 = "교인 승인 후 이용"** 안내로 갈라 보여 준다(분기는 `errorCode`). 404가 아니라 401/403인 이유는 공유받은 주소에서 안내하기 위해서다.
+- **무효 토큰**: 이 5개 경로에 `Authorization` 토큰을 보냈는데 무효·만료면 메뉴가 `PUBLIC`이어도 **401 `INVALID_TOKEN`**이다(교인 전용 글이 조용히 빠진 목록을 받지 않게). `authFetch`가 갱신 후 재요청한다. 갱신이 실패하면 `Authorization` 없이 한 번 더 요청해 공개 목록을 보여 준다. 토큰이 없을 때는 헤더를 보내지 않는다(빈 `Bearer `는 서버가 토큰 없음으로 보고 통과시키지만 보내지 않는 편이 맞다).
+- **새 권한과 기존 토큰**: 권한은 토큰에 담기고 access 토큰은 1시간 간다. 권한을 막 받았거나 배포 직후라 토큰에 새 조회 권한이 없으면 403이 날 수 있으니, 이 5개 메뉴 읽기의 403에서는 한 번 토큰을 갱신하고 다시 요청한다.
+- **관리자 필터**: `GET /api/sermons?membersOnly=true|false`, `GET /api/gallery/albums?membersOnly=true|false`는 쓰기 권한(`SERMON_WRITE`·`GALLERY_WRITE`)이 있을 때만 적용되고, 없으면 조용히 무시된다(방문자가 교인 전용 글 개수를 알아내지 못하게). 확인창 숫자는 이 필터의 `totalElements`를 쓴다.
+- 글 단위 `membersOnly` 전환: 설교 `PATCH /api/admin/sermons/{id}` `{ "version", "membersOnly" }`, 앨범 `PATCH /api/admin/gallery/albums/{id}` 같은 모양. 카드에 `version`이 있어 목록에서 바로 보낼 수 있다. 메뉴 설정을 바꿔도 글 표시는 지워지지 않는다. 설교 전체 수정 `PUT /api/admin/sermons/{id}`에서 membersOnly를 보내지 않으면 유지(`true`·`false`를 보내면 그 값으로 바뀐다), 등록(POST)에서 빠지면 `false`다.
+- **부서 연결 앨범**: 응답의 `departmentLinked: true`인 앨범은 `membersOnly=true`로 바꿀 수 없고(400 `INVALID_INPUT_VALUE`), `membersOnly` 앨범은 부서에 연결할 수 없다(부서 수정 400). 버튼·선택지를 미리 막는다. 두 관리자가 같은 순간 "교인만으로 바꾸기"와 "부서에 연결하기"를 하면 둘 다 통과할 수 있다(서버 알려진 한계 — 잠금 없음).
+- **홈 `/api/main`**: 방문자 기준이다 — `membersOnly` 설교는 없고, 메뉴가 교인만인 공지·일정은 빈 배열, 메뉴가 교인만인 설교는 카드만 나온다(상세는 막힌다).
+- **반영 지연**: 메뉴나 글을 교인만으로 바꾼 뒤에도, 공개였던 미디어는 브라우저·프록시 캐시에 최대 24시간(`Cache-Control: public, max-age=86400`) 남을 수 있고, 홈 피드는 캐시 TTL(기본 60초) 동안 이전 상태를 보여 줄 수 있다.
 
 ### 2.4 인가 거부 → 401 vs 403
 
@@ -198,7 +215,7 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
 
 ### 3.2 목록 카드엔 본문 없음
 
-목록과 상세는 **다른 DTO**다. 카드에는 본문(`content`/`description`) 필드 자체가 없고, `version`도 없다. 본문·`version`은 **상세 단건 조회(`GET .../{id}`)에서만** 온다. 별도 `summary`(잘린 요약) 필드는 없다 — 카드는 메타, 본문은 상세.
+목록과 상세는 **다른 DTO**다. 카드에는 본문(`content`/`description`) 필드 자체가 없다. `version`은 상세에서 오고, 카드에는 **설교·앨범만** 있다(목록에서 바로 `membersOnly`를 PATCH하기 위해 — #95). 별도 `summary`(잘린 요약) 필드는 없다 — 카드는 메타, 본문은 상세.
 
 ### 3.3 홈 맛보기 vs 전용 페이지 vs `/api/main`
 
@@ -299,10 +316,10 @@ async function handleApiError(res: Response): Promise<never> {
 본문 속 이미지·PDF는 URL이 아니라 **`media:{id}` 리터럴**로 참조된다(`![alt](media:42)`, `[제목](media:42)`). 렌더 전에 실제 서빙 URL `GET /api/media/{id}`로 치환한다. 이 모델 덕에 본문이 교회별 베이스 URL과 무관하게 동일하다. **치환 결과는 교회 접두사를 포함한 절대 URL**(`${NEXT_PUBLIC_API_BASE}/api/media/{id}`)이어야 한다 — 상대경로 `/api/media/{id}`는 접두사가 없어 교회를 정할 수 없다. 다른 교회의 미디어 id는 404다.
 
 - `GET /api/media/{id}`는 파일 바이트를 반환하며 응답에 `X-Content-Type-Options: nosniff`가 붙는다(MIME 스니핑 기반 저장형 XSS 차단). 관리용 메타 조회(`/api/admin/media/{id}`)와 다르다(6장).
-- **공개 판단 규칙**: 미디어가 **공지·행사·부서 본문, 부서 대표 사진, 부서에 연결된 앨범의 사진, 주보** 중 하나에 쓰이면 공개라서 위처럼 `${NEXT_PUBLIC_API_BASE}/api/media/{id}`만으로 열린다(`Cache-Control: public, max-age=86400`). **설교 본문·갤러리 사진·갤러리 앨범 설명**만 쓰는 미디어는 공개가 아니다. 판단은 요청 시점에 하므로 콘텐츠를 지우거나 연결을 끊으면 바로 바뀐다.
+- **공개 판단 규칙**(#95): 미디어가 **지금 누구나 볼 수 있는 글**에 쓰이면 공개라서 위처럼 `${NEXT_PUBLIC_API_BASE}/api/media/{id}`만으로 열린다(`Cache-Control: public, max-age=86400`). 공지·행사 본문·주보는 그 메뉴가 누구나일 때, 설교 본문은 설교 메뉴가 누구나이고 그 설교가 `membersOnly`가 아닐 때, 갤러리 사진·앨범 설명은 갤러리 메뉴가 누구나이고 그 앨범이 `membersOnly`가 아닐 때, 부서 본문·대표 사진·연결 앨범 사진은 항상. 공개 글과 교인 전용 글이 함께 쓰면 공개다. 판단은 요청 시점에 하므로 설정을 바꾸거나 콘텐츠를 지우거나 연결을 끊으면 바로 바뀐다(이미 받은 브라우저는 최대 하루 남는다). **메뉴가 교인만으로 바뀔 수 있으니 공지·일정·설교·주보도 응답의 서명 주소를 쓴다**(아래).
 - **저장 전 에디터 미리보기**: 공지·행사·부서 본문에 막 올려 넣은 이미지는 글을 **저장하기 전에는 공개가 아니다**(아직 어디에도 쓰이지 않아 404). 에디터 미리보기는 `/api/media/{id}`가 아니라 업로드·관리자 미디어 응답의 `url`(`MediaResponse.url`, 서명 주소)로 그려야 한다.
-- **서명 주소**: 비공개 미디어는 서버가 내려주는 서명 주소로만 열린다. 갤러리 앨범 목록의 `thumbnailUrl`, 앨범 상세의 사진별 `url`과 설명 속 `media:{id}`별 `mediaUrls`(`{ "42": "/api/media/42?exp=…&sig=…" }`), 관리자 미디어 응답의 `url`이다. 이 값은 `/api/media/{id}?exp=…&sig=…` 형태이고 **교회 접두사가 없다** — 그대로 `${NEXT_PUBLIC_API_BASE}${url}`로 붙여 쓴다. **1시간**만 유효하니 화면에 오래 두면 목록·상세를 다시 불러 새 주소를 받는다. 앨범 설명의 `media:{id}`는 `mediaUrls`에 있으면 그 값으로, 없으면 `${NEXT_PUBLIC_API_BASE}/api/media/{id}`로 바꾼다.
-- 서명 없이 비공개 미디어를 요청하거나, 서명이 틀리거나 만료됐거나 `exp`·`sig` 중 하나만 있으면 **404 `RESOURCE_NOT_FOUND`**다(403이 아니다). 서버의 `MEDIA_ACCESS_ENFORCED`가 꺼진 전환 기간에는 서명 없는 비공개 요청도 200이지만, 켜지면 막히므로 **갤러리 이미지는 반드시 서명 주소로 옮겨 둔다**. 설교 응답은 서명 주소를 내려주지 않으므로, 설교 본문에만 쓰인 이미지는 차단이 켜지면 열리지 않는다(공지·행사·부서·주보에도 쓰인 이미지는 공개라 열린다). 이는 설교 본문을 회원 전용 콘텐츠로 본 결정에 따른 것이므로, **차단이 켜져 있는 동안 설교 본문에는 이미지를 넣지 않는다**.
+- **서명 주소**: 비공개 미디어는 서버가 내려주는 서명 주소로만 열린다. 갤러리 앨범 목록의 `thumbnailUrl`, 앨범 상세의 사진별 `url`과 설명 속 `media:{id}`별 `mediaUrls`(`{ "42": "/api/media/42?exp=…&sig=…" }`), **설교·공지·일정 상세의 `mediaUrls`**(본문·description 속 `media:{id}`별, 같은 모양), **주보 카드·상세의 `url`**(PDF, PDF 없으면 null), 관리자 미디어 응답의 `url`이다. `mediaUrls`에는 본문에 나오고 그 교회에 있는 **모든** `media:{id}`가 키로 있다(다른 교회 id·없는 id는 키가 없다, 본문에 이미지가 없으면 `{}` — null이 아니다). 그래서 맵이 주어지면 맵에 없는 이미지는 지워도 된다. 이 값은 `/api/media/{id}?exp=…&sig=…` 형태이고 **교회 접두사가 없다** — 그대로 `${NEXT_PUBLIC_API_BASE}${url}`로 붙여 쓴다. **1시간**만 유효하니 화면에 오래 두면 목록·상세를 다시 불러 새 주소를 받는다. 본문의 `media:{id}`는 `mediaUrls`에 있으면 그 값으로 바꾼다. 주보 링크는 `/api/media/{mediaId}`를 조립하지 말고 `url`을 쓴다.
+- 서명 없이 비공개 미디어를 요청하거나, 서명이 틀리거나 만료됐거나 `exp`·`sig` 중 하나만 있으면 **404 `RESOURCE_NOT_FOUND`**다(403이 아니다). 운영 서버는 `MEDIA_ACCESS_ENFORCED`가 켜져 있어(2026-11-19) 서명 없는 비공개 요청은 막힌다. 설교 상세가 `mediaUrls`를 내려주므로(#95) 예전의 "설교 본문에는 이미지를 넣지 않는다" 제약은 없어졌다.
 - **`next/image` 주의(권장 사항 — 프론트의 Next.js 버전에서 확인할 것)**: 서명 주소는 쿼리 문자열이 있다. `images.remotePatterns`에 `search`를 지정하지 않으면 쿼리를 모두 허용하는 것으로 알려져 있다. 또 서명이 매번 바뀌므로 이미지 최적화 캐시가 주소마다 따로 쌓일 수 있어, 서명 주소 이미지는 `unoptimized`로 쓰는 편을 권한다. 둘 다 실제 프론트에서 동작을 확인한 뒤 적용한다.
 - **치환 순서**: 마크다운 파싱 후 sanitize까지 끝낸 다음 `media:{id}`를 URL로 바꾸거나, sanitize 단계에서 허용 스킴/도메인을 통제하라. 어느 쪽이든 **새니타이즈는 반드시 거친다.**
 
@@ -338,7 +355,7 @@ function renderMarkdown(raw: string): string {
 | 메타 조회 | `GET /api/admin/media/{id}` | `MEDIA_MANAGE` | 메타(바이트 아님) + 미리보기용 서명 주소 `url` |
 | 참조 조회 | `GET /api/admin/media/{id}/references` | `MEDIA_MANAGE` | `{ mediaId, inUse, references[] }` |
 | 삭제 | `DELETE /api/admin/media/{id}` | `MEDIA_MANAGE` | **204** 또는 409 |
-| **서빙** | `GET /api/media/{id}` | JWT 불필요(공개 콘텐츠에 쓰인 것만 공개, 그 외 서명 주소) | 파일 바이트(5.2) |
+| **서빙** | `GET /api/media/{id}` | JWT 불필요(지금 누구나 볼 수 있는 글에 쓰인 것만 공개, 그 외 서명 주소) | 파일 바이트(5.2) |
 
 ### 6.2 업로드 규칙
 
@@ -349,7 +366,7 @@ function renderMarkdown(raw: string): string {
 ### 6.3 삭제 = 차단형(blocking)
 
 1. 삭제 전 **`GET .../{id}/references`로 사전 조회** 권장 — `{ mediaId, inUse, references[] }`. 정상 200(에러 봉투 아님).
-2. `DELETE` 시 참조가 **1건이라도** 있으면 **`409 MEDIA_IN_USE`** + `references` 동봉. 프론트는 "이 콘텐츠들에서 사용 중" 안내 + 항목(`type`/`title`) 링크 노출, **삭제 버튼은 막고 편집으로 유도**.
+2. `DELETE` 시 참조가 **1건이라도** 있으면 **`409 MEDIA_IN_USE`** + `references` 동봉. 교인 전용 글·교인만인 메뉴의 참조도 똑같이 센다(공개 판단과 무관). 프론트는 "이 콘텐츠들에서 사용 중" 안내 + 항목(`type`/`title`) 링크 노출, **삭제 버튼은 막고 편집으로 유도**.
 3. 참조가 0이 되면 그때 실제 삭제(파일+레코드).
 
 `references[]`의 `type` 실제 값: `sermon`·`notice`·`event`·`department`·`gallery_album`·`gallery_photo`·`bulletin`. (`gallery_photo`는 소속 앨범의 id·title로 표면화. 부서 대표 사진·부서에 연결된 앨범의 사진도 `department`로 나온다.)
@@ -362,7 +379,7 @@ function renderMarkdown(raw: string): string {
 
 공개 사진을 내리려면 연결을 끊고 라이브러리에서 지운다. ① 부서 대표 사진이면 `PATCH /api/admin/departments/{id}`로 `{ "version": <현재 version>, "heroMediaId": null }`(`version`은 필수), 앨범 사진이면 앨범에서 그 사진을 제거(연결된 앨범을 부서에서 떼려면 `albumId: null`), 본문에 넣었으면 본문에서 지운다. ② `DELETE /api/admin/media/{id}`로 라이브러리에서 삭제한다(참조가 0이라 이제 통과한다). ③ 이후 그 주소는 404다. 다만 이미 받은 브라우저는 `Cache-Control` 때문에 **최대 1일** 그림을 계속 보여 줄 수 있다. 프론트가 `next/image`로 미디어를 내보내면 그 최적화 캐시(`/_next/image?url=…`)가 방금 내린 이미지를 TTL이 끝날 때까지 계속 내줄 수 있으니, 프론트의 Next.js 설정에서 확인한다.
 
-주의: **부서에 앨범을 연결하면 그 앨범의 모든 사진이 공개**가 된다. 회원 전용 갤러리 앨범을 부서에 연결할 때 공개해도 되는 사진인지 확인한다.
+주의: **부서에 앨범을 연결하면 그 앨범의 모든 사진이 공개**가 된다(갤러리가 교인만이어도). 그래서 `membersOnly` 앨범은 부서에 연결할 수 없다(2.3). 연결 전에 공개해도 되는 사진인지 확인한다.
 
 ## 7. 작성자 표시 정책
 
@@ -427,23 +444,24 @@ async function saveWithRetry(id: number, edit: (cur: Detail) => UpdateReq) {
 | **auth** | — | — | — | — | signup/login/refresh 공개, logout 인증 | — |
 | **member(me)** | — | — | uuid·name·phone·position·roles·permissions·maxPriority·약관 | — | 본인 인증 필요(익명 401) | — |
 | **member(admin)** | — | — | 목록/상세 + `approved`(GALLERY_VIEW 보유 = 교인·권한보유 어드민) | — | 조회·수정 `MEMBER_MANAGE`, 역할부여/회수 `ROLE_MANAGE` | — |
+| **visibility** | — | — | `notices`·`events`·`bulletins`·`sermons`·`gallery` 각 `PUBLIC`·`MEMBERS` | — | **조회 공개**, 저장 `VISIBILITY_MANAGE`(`PUT /api/admin/visibility`) | — |
 | **position** | `sortOrder,asc`(비페이징 평배열) | 없음 | id·name(한글)·sortOrder | — | **목록 공개**, 쓰기 `POSITION_MANAGE` | — |
 | **role** | `priority,desc`(비페이징 평배열) | 없음 | id·name·priority·isSystem·description·permissions | — | `ROLE_MANAGE` | — |
 | **permission** | `name,asc`(비페이징 평배열) | 없음 | id·name(영문)·description(한글) | — | `ROLE_MANAGE` | — |
 | **tag** | `name,asc`(비페이징 평배열) | 없음 | id·name(한글) | — | **목록 공개**, 쓰기 `TAG_MANAGE` | — |
-| **sermon** | `preachedAt,desc` | `preacher`·`series`(완전일치)·`from`/`to`·`q`·`tagId` | id·title·preacher·series·scripture·preachedAt·viewCount·tags·author | O(create/update/patch) | 조회 공개, 쓰기 `SERMON_WRITE` | `content` (+videoUrl·audioUrl 외부링크) |
-| **notice** | `isPinned,desc` + `createdAt,desc` | `q`(**제목만**)·`tagId` | id·title·isPinned·viewCount·createdAt·tags·author | O | 조회 공개, 쓰기 `NOTICE_WRITE` | `content` |
-| **event** | `startAt,asc` | `year`+`month` **또는** `startDate`+`endDate`(쌍 필수)·`tagId` | id·title·location·startAt·endAt·allDay·tags (**author·viewCount 없음**) | O(태그만 수정 시 version 불변) | 조회 공개, 쓰기 `EVENT_WRITE` | `description` |
+| **sermon** | `preachedAt,desc` | `preacher`·`series`(완전일치)·`from`/`to`·`q`·`tagId`·`membersOnly`(쓰기 권한자만) | id·title·preacher·series·scripture·preachedAt·viewCount·tags·author·**membersOnly·version** | O(create/update/patch) | 조회는 설정에 따름(2.3), 쓰기 `SERMON_WRITE` | `content` (+videoUrl·audioUrl 외부링크), 상세 `membersOnly`·`mediaUrls` |
+| **notice** | `isPinned,desc` + `createdAt,desc` | `q`(**제목만**)·`tagId` | id·title·isPinned·viewCount·createdAt·tags·author | O | 조회는 설정에 따름(2.3), 쓰기 `NOTICE_WRITE` | `content`, 상세 `mediaUrls` |
+| **event** | `startAt,asc` | `year`+`month` **또는** `startDate`+`endDate`(쌍 필수)·`tagId` | id·title·location·startAt·endAt·allDay·tags (**author·viewCount 없음**) | O(태그만 수정 시 version 불변) | 조회는 설정에 따름(2.3), 쓰기 `EVENT_WRITE` | `description`, 상세 `mediaUrls` |
 | **department** | `sortOrder,id`(**비페이징 평배열**) | 없음 | id·name·leader·parentId·sortOrder·heroMediaId (**author·tags·viewCount 없음**) | **X**(태그 없음) | 조회 공개, 쓰기 `DEPT_WRITE` | `description` |
-| **main** | 고정(설교3·공지3·일정5) | 없음 | 세 도메인 카드 메타(본문 제외) | — | **공개**(Redis 캐시, 콘텐츠 CUD 시 무효화) | — |
-| **media** | `createdAt,desc`(admin) | `type`·`from`/`to` | 메타 + 서명 주소 `url` | — | 관리 `MEDIA_MANAGE`, **서빙 `/api/media/{id}`는 공개 콘텐츠에 쓰인 것만 공개(5.2)** | — |
-| **gallery** | `createdAt,desc` | `tagId` | id·title·thumbnailMediaId(첫 사진, 없으면 null)·**thumbnailUrl(서명 주소, 없으면 null)**·photoCount·createdAt·tags·author | O(앨범, 태그만 수정 시 version 불변) | **`GALLERY_VIEW` 회원전용**, 쓰기 `GALLERY_WRITE` | 앨범 `description` |
-| **bulletin** | `serviceDate,desc` | 없음(OpenAPI 참조) | id·title·serviceDate·mediaId·author | — | **조회 공개**, 쓰기 `BULLETIN_WRITE` | 없음(PDF FK만, `GET /api/media/{mediaId}`로 열람 — 주보라서 공개) |
+| **main** | 고정(설교3·공지3·일정5) | 없음 | 세 도메인 카드 메타(본문 제외) | — | **공개**, 방문자 기준(2.3 홈 규칙). Redis 캐시, 콘텐츠 CUD·공개 범위 저장 시 무효화 | — |
+| **media** | `createdAt,desc`(admin) | `type`·`from`/`to` | 메타 + 서명 주소 `url` | — | 관리 `MEDIA_MANAGE`, **서빙 `/api/media/{id}`는 지금 누구나 볼 수 있는 글에 쓰인 것만 공개(5.2)** | — |
+| **gallery** | `createdAt,desc` | `tagId`·`membersOnly`(쓰기 권한자만) | id·title·thumbnailMediaId(첫 사진, 없으면 null)·**thumbnailUrl(서명 주소, 없으면 null)**·photoCount·createdAt·tags·author·**membersOnly·departmentLinked·version** | O(앨범, 태그만 수정 시 version 불변) | 조회는 설정에 따름(2.3, 기본 교인만), 쓰기 `GALLERY_WRITE` | 앨범 `description`, 상세 `membersOnly`·`departmentLinked`·`mediaUrls` |
+| **bulletin** | `serviceDate,desc` | 없음(OpenAPI 참조) | id·title·serviceDate·mediaId·author·**url(PDF 서명 주소)** | — | 조회는 설정에 따름(2.3), 쓰기 `BULLETIN_WRITE` | 없음(PDF FK만, 카드·상세의 `url`로 연다 — 메뉴가 교인만이어도 열린다) |
 
 도메인 특이 동작 메모:
 - **일정 달력**: 범위 파라미터는 **반드시 쌍**(한쪽만 보내면 400). 둘 다 보내면 year/month 우선. 겹침은 `end_at` 배타 경계, `end_at=null` 점 이벤트는 `start_at` 기준 포함.
 - **부서**: 비페이징 평배열 → 프론트가 `parentId`로 트리 조립. 하위 부서 있으면 삭제 `409 DEPARTMENT_HAS_CHILDREN`. 루트화는 `PUT parentId=null`만(PATCH의 `parentId=null`은 미변경).
-- **부서 사진**: 목록 카드에 `heroMediaId`(대표 사진 mediaId, 없으면 null), 상세에 `heroMediaId`·`albumId`·`photos`(연결 앨범의 사진 mediaId 배열, 앨범 순서)가 더해졌다. 연결 앨범이 삭제됐으면 상세는 `albumId: null`, `photos: []`. 이미지는 `${NEXT_PUBLIC_API_BASE}/api/media/{id}`로 바로 열린다(부서에 쓰였으니 공개). 쓰기(POST·PUT·PATCH): `heroMediaId`·`albumId`는 **칸을 보내지 않으면 유지, `null`이면 비움, 값이면 설정**이다 — PUT에서도 칸을 생략하면 지워지지 않는다. 대표 사진이 없는·이미지가 아닌 미디어이거나 앨범이 없는·삭제된 앨범이면 `400 INVALID_INPUT_VALUE`.
+- **부서 사진**: 목록 카드에 `heroMediaId`(대표 사진 mediaId, 없으면 null), 상세에 `heroMediaId`·`albumId`·`photos`(연결 앨범의 사진 mediaId 배열, 앨범 순서)가 더해졌다. 연결 앨범이 삭제됐으면 상세는 `albumId: null`, `photos: []`. 이미지는 `${NEXT_PUBLIC_API_BASE}/api/media/{id}`로 바로 열린다(부서에 쓰였으니 메뉴 설정과 무관하게 공개). 쓰기(POST·PUT·PATCH): `heroMediaId`·`albumId`는 **칸을 보내지 않으면 유지, `null`이면 비움, 값이면 설정**이다 — PUT에서도 칸을 생략하면 지워지지 않는다. 대표 사진이 없는·이미지가 아닌 미디어이거나 앨범이 없는·삭제된·교인 전용(`membersOnly`) 앨범이면 `400 INVALID_INPUT_VALUE`.
 - **공지 검색**: `q`는 **제목만** 매칭(Swagger 설명은 "제목/내용"이라 적혀 있으나 코드는 제목만 — 소스가 사실).
 - **조회수**: 설교·공지만 존재. 상세 조회 시 +1(부수효과).
 - **갤러리 사진 추가**: `POST .../{id}/photos`(multipart) — `files`(신규 업로드) **와/또는** `mediaIds`(기존 재사용) 혼합 가능. 반환은 갱신된 앨범 상세 전체.

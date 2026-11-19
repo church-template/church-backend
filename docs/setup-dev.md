@@ -126,7 +126,7 @@ curl -s localhost:8080/church/dev/api/main
   `/church/dev/api/...`로 호출한다. 반대로 `churches`에 없는 slug를 넣으면 앱이 기동하지 않는다.
 - **교회 없이 DB를 만지면 예외**("테넌트가 지정되지 않았습니다") — 스케줄러 등 요청 밖 코드는
   `TenantContext.runAs(churchId, …)`를 트랜잭션 바깥에서 감싸야 한다(`.claude/rules/multi-church-template.md`).
-- **회원전용 경로**: 갤러리·설교·통독 챌린지는 `MEMBER` 승인 계정으로만 200. `USER`(01090000007)는 403이 정상.
+- **회원전용 경로**: 통독 챌린지는 `MEMBER` 승인 계정으로만 200. 공지·일정·주보·설교·갤러리는 교회 공개 범위 설정을 따른다(#95) — `dev` 교회는 V21이 기존 교회 값(설교·갤러리 교인만)을 넣어 두 메뉴는 `MEMBER` 계정으로만 200이고 `USER`(01090000007)는 403이 정상. 바꾸려면 `PUT /api/admin/visibility`(SUPER_ADMIN·ADMIN).
 - **`version.yml`·`build.gradle` version·`CHANGELOG.*` 수동 편집 금지** — CI 자동화 소유(`.claude/rules/versioning-ci.md`).
 - **SB4 스타터 명명**: web은 `spring-boot-starter-webmvc`, 테스트는 모듈별 `*-test`(`.claude/rules/spring-boot-4.md`).
 - 운영 DB에 원격 접속하려면: `docs/db-remote-access.md`.

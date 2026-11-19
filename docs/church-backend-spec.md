@@ -25,7 +25,7 @@
 ## 2. 멀티테넌시 정책 (중요)
 
 - **앱 1개·PostgreSQL 1개·Redis 1개를 모든 교회가 공유한다**(공유형 멀티테넌시, #86). 교회별 DB·배포 인스턴스는 두지 않는다.
-- **격리는 `church_id` 컬럼 + Hibernate `@TenantId`**다. 19개 테이블에 `church_id`가 있고(`BaseTimeEntity`에 선언, `ContentTag`는 직접 선언) JPA 조회·저장에 자동 적용된다. 전 교회 공용 카탈로그 `permissions`와 순수 조인 테이블 `role_permissions`·`member_roles`에는 없다. DB 레벨 격리(RLS·스키마 분리)는 없다 — 격리는 코드와 격리 테스트가 지킨다.
+- **격리는 `church_id` 컬럼 + Hibernate `@TenantId`**다. 20개 테이블에 `church_id`가 있고(`BaseTimeEntity`에 선언, `ContentTag`는 직접 선언) JPA 조회·저장에 자동 적용된다. 전 교회 공용 카탈로그 `permissions`와 순수 조인 테이블 `role_permissions`·`member_roles`에는 없다. DB 레벨 격리(RLS·스키마 분리)는 없다 — 격리는 코드와 격리 테스트가 지킨다.
 - **요청의 교회는 API 경로 접두사 `/church/{slug}`로 정한다**(`churches.slug`). `TenantFilter`가 보안 필터 체인보다 앞에서 접두사를 떼므로 경로 인가 규칙과 컨트롤러 매핑은 `/api/**` 그대로다. 등록되지 않은 slug는 `404 RESOURCE_NOT_FOUND`. `/actuator/health`·Swagger·`/error`는 교회 없이 통과한다.
 - `TENANT_DEFAULT_SLUG`가 설정돼 있으면 접두사 없는 `/api/**` 요청을 그 교회로 처리한다(로컬·테스트·첫 교회 전환 기간 전용). 비어 있으면 404, `churches`에 없는 slug면 기동 실패.
 - **fail-closed**: 교회가 정해지지 않은 DB 접근은 예외다. 기본 교회나 전체를 보는 루트 테넌트는 없다. 요청 밖 코드(스케줄러)는 `TenantContext.runAs(churchId, …)`를 트랜잭션 **바깥**에서 감싼다.
@@ -126,20 +126,27 @@ POSITION_MANAGE  직분 관리
 MEDIA_MANAGE     미디어 업로드/조회/삭제
 TAG_MANAGE       태그 추가/수정/삭제
 GALLERY_WRITE    갤러리 업로드/수정/삭제
-GALLERY_VIEW     갤러리 조회 (회원 전용 열람)
+GALLERY_VIEW     갤러리 조회 (메뉴·앨범이 교인만일 때)
+SERMON_VIEW      설교 조회 (메뉴·설교가 교인만일 때)
+NOTICE_VIEW      공지 조회 (메뉴가 교인만일 때, #95)
+EVENT_VIEW       일정 조회 (메뉴가 교인만일 때, #95)
+BULLETIN_VIEW    주보 조회 (메뉴가 교인만일 때, #95)
+VISIBILITY_MANAGE 메뉴 공개 범위 설정 (#95, SUPER_ADMIN·ADMIN)
 BULLETIN_WRITE   주보 업로드/수정/삭제
 INQUIRY_MANAGE   문의 조회/완료체크/삭제
 ```
+
+`*_VIEW` 5개는 "교인만"으로 닫힌 메뉴·글을 볼 수 있는 권한이다(§4.5). `NOTICE_VIEW`·`EVENT_VIEW`·`BULLETIN_VIEW`는 V21이 `GALLERY_VIEW`를 가진 **모든 역할**(교회가 만든 역할 포함)에 줬다.
 
 roles (초기):
 ```
 SUPER_ADMIN  priority 1000  is_system true   (모든 permission 보유)
 ADMIN        priority 900   is_system true
-MEMBER       priority 100   is_system false  (승인된 교인 — GALLERY_VIEW 보유)
+MEMBER       priority 100   is_system false  (승인된 교인 — *_VIEW 5개 보유)
 USER         priority 0     is_system true   (가입 시 자동 부여, 갤러리 열람 불가)
 ```
 
-`MEMBER`("교인") 역할은 회원 전용 콘텐츠(갤러리 등) 열람을 위한 역할이다. 누구나 가입하면 `USER`가 되지만, 관리자가 승인한 교인에게 `MEMBER` 역할을 부여해야 `GALLERY_VIEW`가 생겨 갤러리를 볼 수 있다. 단순 가입자(외부인)는 차단된다. "교인"은 직분(position)이 아니라 역할(role)로 관리한다 — 열람 가부는 인가 문제이기 때문이다.
+`MEMBER`("교인") 역할은 "교인만"으로 정한 메뉴·글(§4.5) 열람을 위한 역할이다. 누구나 가입하면 `USER`가 되지만, 관리자가 승인한 교인에게 `MEMBER` 역할을 부여해야 `*_VIEW` 권한이 생겨 교인 전용 메뉴를 볼 수 있다. 단순 가입자(외부인)는 차단된다. "교인"은 직분(position)이 아니라 역할(role)로 관리한다 — 열람 가부는 인가 문제이기 때문이다.
 
 기본 역할 4종은 **교회마다 따로** 있다(첫 교회는 마이그레이션 시드, 이후 교회는 `scripts/new-church.sh`가 생성). 교회의 최초 SUPER_ADMIN은 등록 스크립트가 만드는 **교회 대표자** 계정이다 — 기동 시 환경변수로 관리자를 만들던 부트스트랩은 없다. 운영자는 앱에 상시 계정을 두지 않는다. 이후 권한 부여는 API로 하고, SUPER_ADMIN 추가만 DB 직접 수정으로 한다.
 
@@ -153,7 +160,7 @@ USER         priority 0     is_system true   (가입 시 자동 부여, 갤러�
 - 입력: `phone`(전화번호), `name`(이름), `password`(비밀번호), 약관 동의(`termsAgreed`, `privacyAgreed` 둘 다 필수). `email`은 선택.
 - 필수 동의 2종이 true가 아니면 가입을 거부하고, 성립 시 `agreed_at`에 동의 시각 기록.
 - 백엔드가 `uuid`를 자동 발급(`UUID.randomUUID()`)하여 저장.
-- 가입 직후엔 `USER` 역할만 부여된 **미승인 상태**. 갤러리 등 회원 전용 기능은 못 본다.
+- 가입 직후엔 `USER` 역할만 부여된 **미승인 상태**. "교인만"으로 정한 메뉴·글(§4.5)은 못 본다.
 - 관리자가 회원 목록에서 본인(교인)임을 확인하고 `MEMBER` 역할을 부여하면 정식 교인이 된다. 이것이 이메일 인증을 대체하는 본인 확인 절차다(서로 아는 사이라는 교회 특성 활용).
 
 **로그인**
@@ -190,9 +197,10 @@ USER         priority 0     is_system true   (가입 시 자동 부여, 갤러�
 - 메서드 단위로 권한 검증: `@PreAuthorize("hasAuthority('SERMON_WRITE')")`.
 - Spring Security 매핑 시 권한명에 `ROLE_` 또는 권한 접두사를 코드에서 부여(DB엔 접두사 없이 저장).
 
-**경로 인가 규칙 (3분법)** — "조회는 모두 공개"가 아니다. 다음 세 갈래로 명시한다.
+**경로 인가 규칙** — "조회는 모두 공개"가 아니다. 다음 갈래로 명시한다.
 - `/api/admin/**` → 해당 쓰기/관리 권한 필요(예: `SERMON_WRITE`).
-- `/api/gallery/**` → 로그인 + `GALLERY_VIEW` 필요(회원 전용 조회. 공개가 아님).
+- `/api/bible-challenges/**` → `CHALLENGE_PARTICIPATE`, `/api/vehicle-runs/**` → `VEHICLE_APPLY`(경로 매처, 승인 교인 전용).
+- 공지·일정·주보·설교·갤러리 읽기(`/api/notices/**`·`/api/events/**`·`/api/bulletins/**`·`/api/sermons/**`·`/api/gallery/**`) → **교회 설정에 따름**(§4.5). 설정이 교회마다 DB에 있어 경로 매처가 아니라 컨트롤러의 `ContentAccessGuard`가 판단한다(#95 전에는 설교·갤러리가 고정 매처였다).
 - 그 외 `/api/**` 조회 → 공개.
 - 이 규칙은 교회 접두사 `/church/{slug}`를 뗀 뒤의 경로에 적용된다(§2). `/church/{slug}/api/admin/**`도 똑같이 보호된다.
 
@@ -206,6 +214,30 @@ USER         priority 0     is_system true   (가입 시 자동 부여, 갤러�
 - 요청자는 **자기 자신의 역할을 변경·회수할 수 없다**(실수로 권한을 잃는 것 방지). 본인 대상 역할 부여/회수 요청은 거부.
 - **마지막 SUPER_ADMIN 보호**: 그 교회에 SUPER_ADMIN이 1명뿐이면 그 역할의 회수·강등·삭제를 거부한다(교회에 최고 관리자가 사라지는 것 방지). 집계는 교회 단위다.
 
+### 4.5 메뉴·글 공개 범위 (#95)
+
+교회마다 5개 메뉴(공지 `NOTICE`·일정 `EVENT`·주보 `BULLETIN`·설교 `SERMON`·갤러리 `GALLERY`)의 열람 범위를 `PUBLIC`(누구나)·`MEMBERS`(교인만)로 정하고, 설교·앨범은 한 건씩 `membersOnly`(교인만)를 표시할 수 있다. "교인" = 그 메뉴의 `*_VIEW` 권한 보유자다.
+
+| 메뉴 | 글 `membersOnly` | 조회 권한 없음 | 조회 권한 있음 |
+|---|---|---|---|
+| `MEMBERS` | (무관) | 목록·상세 모두 비로그인 401 `INVALID_TOKEN`, 로그인+권한 없음 403 `ACCESS_DENIED` | 전부 |
+| `PUBLIC` | false | 봄 | 봄 |
+| `PUBLIC` | true (설교·앨범) | 목록에서 빠짐(`totalElements`에도 안 셈), 상세 401/403 | 봄 |
+
+- **404가 아니라 401/403**인 이유: 공유받은 주소에서 "로그인하면 볼 수 있다"고 안내하기 위해서다. 그 번호에 교인 전용 글이 있다는 사실은 드러나지만 제목·내용은 드러나지 않는다(위험 수용).
+- **무효 토큰**: 5개 메뉴의 읽기 경로에 `Authorization` 토큰이 왔는데 무효·만료면 메뉴가 `PUBLIC`이어도 `401 INVALID_TOKEN`이다(만료된 교인이 교인 전용 글이 빠진 목록을 오류 없이 받지 않게 — 프론트가 갱신 후 재요청). 토큰이 없거나 빈 `Bearer `는 비로그인으로 통과한다.
+- **관리자 필터**: 설교·앨범 목록의 `?membersOnly=true|false`는 쓰기 권한(`SERMON_WRITE`·`GALLERY_WRITE`) 보유자에게만 적용되고, 그 외에는 무시된다(방문자가 교인 전용 글 수를 알아내지 못하게).
+- 글 단위 검사는 조회수 증가보다 먼저 한다(막힌 요청이 조회수를 올리지 않는다).
+- 글의 `membersOnly`는 메뉴 설정을 바꿔도 지워지지 않는다. 메뉴가 `MEMBERS`인 동안에는 효과가 없을 뿐이다.
+- **판단 위치**: "누가 보는가"는 컨트롤러(`ContentAccessGuard`)에서만 판단하고, 서비스는 `includeMembersOnly` 같은 명시적 인자만 받는다 — 서비스가 로그인 상태를 읽으면 보는 사람과 무관한 `/api/main` 캐시에 교인용 결과가 섞인다.
+- **홈(`/api/main`)**: 보는 사람과 무관하게 방문자 기준으로 고른다. `membersOnly` 설교는 빠진다. 메뉴가 `MEMBERS`인 공지·일정은 빠진다. 메뉴가 `MEMBERS`인 설교는 카드만 나온다(#53 결정 유지 — 상세는 막힌다). 공개 범위 저장·설교 `membersOnly` 변경 시 `main` 캐시를 지운다.
+- **부서 연결 앨범**: 부서 소개는 연결 앨범 사진을 누구에게나 보여 주므로, 부서에 연결된 앨범은 `membersOnly=true`로 바꿀 수 없고 `membersOnly` 앨범은 부서에 연결할 수 없다(둘 다 `400 INVALID_INPUT_VALUE`). 앨범 응답의 `departmentLinked`가 그 근거다.
+  - **알려진 한계**: 두 검사는 잠금 없이 각자 검증만 한다. "앨범을 교인만으로 바꾸기"와 "그 앨범을 부서에 연결하기"가 동시에 들어오면 둘 다 통과해 교인 전용 앨범이 부서에 연결될 수 있다(그 앨범 사진은 부서 참조로 공개된다). 관리자 두 명이 같은 앨범을 같은 순간에 바꿀 때만 생겨 잠금을 두지 않았다. 생기면 둘 중 하나를 다시 저장해 바로잡는다.
+- **기본값**: 기존 교회(V21) = 설교·갤러리 `MEMBERS`, 나머지 `PUBLIC`. 새 교회(`scripts/new-church.sql`)와 설정 행이 없는 교회 = 갤러리만 `MEMBERS`, 나머지 `PUBLIC`.
+- 설정은 교회별로 캐시(`visibility`)하고 저장 시 새 값으로 덮어쓴다. 동시 저장은 마지막 저장이 이긴다(낙관락 없음).
+- **반영 지연**: 메뉴나 글을 교인만으로 바꾼 뒤에도, 공개였던 미디어는 브라우저·프록시 캐시에 최대 24시간(`Cache-Control: public, max-age=86400`) 남을 수 있고, 홈(`/api/main`)은 캐시 TTL(기본 60초) 동안 이전 상태를 보여 줄 수 있다.
+- 새 조회 권한은 토큰에 담긴다 — 권한을 막 받은 교인은 토큰 갱신(최대 1시간) 전까지 403을 받을 수 있다(프론트는 이 경로의 403에서 한 번 갱신 후 재요청).
+
 ### 4.4 식별자 네이밍 규칙 (영어 키 vs 한글 표시)
 - **코드가 인가 키로 쓰는 값은 영어**로 둔다: permission name(`SERMON_WRITE`), role name(`ADMIN`, `MEMBER`). 코드에서 `hasAuthority('...')`로 직접 참조되므로 인코딩·협업 안정성을 위해 영어 식별자를 쓴다.
 - **사용자에게 보이는 데이터는 한글**: position name(목사·장로), tag name(예배·선교), 공지·설교 제목/본문 등.
@@ -216,7 +248,7 @@ USER         priority 0     is_system true   (가입 시 자동 부여, 갤러�
 ## 5. API 명세
 
 규칙:
-- 공개 조회(`GET /api/...`)는 인증 불필요. 쓰기/관리(`/api/admin/...`)는 해당 permission 필요.
+- 공개 조회(`GET /api/...`)는 인증 불필요 — 단 공지·일정·주보·설교·갤러리는 교회 설정에 따른다(§4.5). 쓰기/관리(`/api/admin/...`)는 해당 permission 필요.
 - **모든 목록 조회는 페이지네이션을 적용**한다. 응답은 아래 공통 형식을 따른다.
 - 페이징/정렬 파라미터 표준화: `?page=0&size=10&sort=createdAt,desc`. `size`로 개수를 조절해 홈 맛보기(size=3)와 상세 페이지(size=10 등)를 같은 API로 처리한다.
 - 삭제는 soft delete(`deleted_at`) 우선, 조회 시 필터링.
@@ -388,8 +420,8 @@ POST /api/auth/login
 ### 5.5 설교 (Sermon)
 | 메서드 | 경로 | 권한 | 설명 |
 |---|---|---|---|
-| GET | /api/sermons | 공개 | 목록 (페이징, 설교자·시리즈·날짜·태그 필터, 검색 / 카드용 메타만, content 제외) |
-| GET | /api/sermons/{id} | 공개 | 상세 |
+| GET | /api/sermons | 설정에 따름(§4.5) | 목록 (페이징, 설교자·시리즈·날짜·태그 필터, 검색, `membersOnly` 관리자 필터 / 카드용 메타만, content 제외) |
+| GET | /api/sermons/{id} | 설정에 따름(§4.5) | 상세 |
 | POST | /api/admin/sermons | SERMON_WRITE | 등록 |
 | PUT | /api/admin/sermons/{id} | SERMON_WRITE | 전체 수정 |
 | PATCH | /api/admin/sermons/{id} | SERMON_WRITE | 부분 수정 |
@@ -397,11 +429,14 @@ POST /api/auth/login
 
 설교 필드(권장): title, preacher(설교자), series(시리즈), scripture(성경 본문 구절), content(**마크다운 TEXT**, 설교 본문), video_url, audio_url, view_count, preached_at(설교일), created_by(FK → members, 최초 작성자), updated_by(FK → members, 마지막 수정자=표시용 작성자), created_at, updated_at, deleted_at. 태그는 content_tags로 연결(생성·수정 시 `tagIds` 수신). 기본 정렬: `preached_at DESC`. 목록 카드 표시 항목: 제목·태그·조회수·설교일·작성자(content 제외).
 
+- `members_only`(BOOLEAN, 기본 false, #95): 글 단위 "교인만". 등록·수정 요청의 `membersOnly`(POST는 null이면 false, PUT에서 membersOnly를 보내지 않으면 유지, PATCH도 null이면 미변경), 카드·상세 응답의 `membersOnly`. 카드에는 목록에서 바로 `membersOnly`를 PATCH할 때 보낼 `version`도 있다.
+- 상세의 `mediaUrls`: 본문 `media:{id}`별 서명 주소 맵(같은 교회에 있는 미디어만 키, 없으면 빈 맵). 설교가 교인 전용이어도 본문 이미지가 열린다.
+
 ### 5.6 일정/행사 (Event)
 | 메서드 | 경로 | 권한 | 설명 |
 |---|---|---|---|
-| GET | /api/events | 공개 | 목록 (`?year=&month=` 또는 `?startDate=&endDate=` 범위) |
-| GET | /api/events/{id} | 공개 | 상세 |
+| GET | /api/events | 설정에 따름(§4.5) | 목록 (`?year=&month=` 또는 `?startDate=&endDate=` 범위) |
+| GET | /api/events/{id} | 설정에 따름(§4.5) | 상세 (`mediaUrls` = description 속 `media:{id}`별 서명 주소) |
 | POST | /api/admin/events | EVENT_WRITE | 등록 |
 | PUT | /api/admin/events/{id} | EVENT_WRITE | 전체 수정 |
 | PATCH | /api/admin/events/{id} | EVENT_WRITE | 부분 수정 |
@@ -412,8 +447,8 @@ POST /api/auth/login
 ### 5.7 공지 (Notice)
 | 메서드 | 경로 | 권한 | 설명 |
 |---|---|---|---|
-| GET | /api/notices | 공개 | 목록 (상단고정 우선 정렬 / 카드용 메타만, content 제외) |
-| GET | /api/notices/{id} | 공개 | 상세 |
+| GET | /api/notices | 설정에 따름(§4.5) | 목록 (상단고정 우선 정렬 / 카드용 메타만, content 제외) |
+| GET | /api/notices/{id} | 설정에 따름(§4.5) | 상세 (`mediaUrls` = 본문 `media:{id}`별 서명 주소) |
 | POST | /api/admin/notices | NOTICE_WRITE | 등록 |
 | PUT | /api/admin/notices/{id} | NOTICE_WRITE | 전체 수정 |
 | PATCH | /api/admin/notices/{id} | NOTICE_WRITE | 부분 수정 (상단고정 토글 등) |
@@ -434,13 +469,13 @@ POST /api/auth/login
 부서 필드(권장): name, description(**마크다운 TEXT**, 부서 소개·활동), leader(담당 교역자), parent_id(자기참조 FK, 계층 표현, nullable), sort_order, hero_media_id(대표 사진, FK → media, nullable, `ON DELETE SET NULL`), album_id(연결 앨범, FK → gallery_albums, nullable), created_at, deleted_at. 기본 정렬: `sort_order ASC`(관리자 지정 순서).
 
 - **사진 칸 응답**: 목록 카드와 상세에 `heroMediaId`, 상세에 `albumId`와 `photos`(연결 앨범의 사진 mediaId 배열, 앨범 순서)가 내려간다. 연결 앨범이 삭제됐으면 상세는 `albumId: null`, `photos: []`다. 두 칸 모두 없으면 `null`/빈 배열이라 기존 응답에 필드만 추가된다.
-- **쓰기 규칙**: POST·PUT·PATCH의 `heroMediaId`·`albumId`는 **보내지 않으면 유지, `null`이면 비움, 값이면 설정**이다(POST는 없음=연결 안 함). 대표 사진이 존재하지 않거나 이미지가 아닌 미디어이거나, 앨범이 없거나 삭제됐으면 `400 INVALID_INPUT_VALUE`다.
+- **쓰기 규칙**: POST·PUT·PATCH의 `heroMediaId`·`albumId`는 **보내지 않으면 유지, `null`이면 비움, 값이면 설정**이다(POST는 없음=연결 안 함). 대표 사진이 존재하지 않거나 이미지가 아닌 미디어이거나, 앨범이 없거나 삭제됐거나 교인 전용(`membersOnly`)이면 `400 INVALID_INPUT_VALUE`다(§4.5).
 - 부서에 앨범을 연결하면 그 앨범의 사진은 모두 공개 미디어가 된다(아래 파일 서빙 규칙).
 
 ### 5.9 공통 (Common)
 | 메서드 | 경로 | 권한 | 설명 |
 |---|---|---|---|
-| GET | /api/main | 공개 | 메인페이지 통합(최신 설교 + 공지 + 다가오는 일정), Redis 캐싱 |
+| GET | /api/main | 공개 | 메인페이지 통합(최신 설교 + 공지 + 다가오는 일정), Redis 캐싱. 방문자 기준으로 고른다(§4.5 홈 규칙) |
 
 교회 소개·연혁·비전·오시는 길 등 상수성 정보는 **백엔드에 두지 않고 프론트엔드에 하드코딩**한다(거의 변경되지 않고, 교회별 프론트가 어차피 분리되어 있어 "백엔드는 동일" 원칙에 부합).
 
@@ -457,13 +492,14 @@ POST /api/auth/login
 | GET | /api/admin/media/{id} | MEDIA_MANAGE | 미디어 단건 정보 |
 | GET | /api/admin/media/{id}/references | MEDIA_MANAGE | 이 미디어를 참조하는 글 목록 반환 |
 | DELETE | /api/admin/media/{id} | MEDIA_MANAGE | 삭제 (참조 있으면 차단) |
-| GET | /api/media/{id} | 공개 콘텐츠에 쓰인 것만 공개, 그 외 서명 주소 | 실제 파일 접근(서빙/다운로드) — 본문 이미지 렌더·PDF 열람용 |
+| GET | /api/media/{id} | 지금 누구나 볼 수 있는 글에 쓰인 것만 공개, 그 외 서명 주소 | 실제 파일 접근(서빙/다운로드) — 본문 이미지 렌더·PDF 열람용 |
 
-**파일 서빙 접근 규칙 (`GET /api/media/{id}`)** — JWT는 필요 없지만, 미디어는 **공개 콘텐츠에 쓰인 것만** 익명에게 열린다.
-- **공개 근거**: 공지·행사·부서 본문, 부서 대표 사진(`hero_media_id`), 부서에 연결된 앨범의 사진, 주보. **설교 본문·갤러리 사진·갤러리 앨범 설명은 공개 근거가 아니다**(갤러리는 회원 전용이고 설교 열람도 회원 전용이라 같은 이미지가 익명에게 새면 안 된다). 판단은 요청 시점에 참조를 다시 계산한다(콘텐츠를 지우거나 연결을 끊으면 바로 반영).
+**파일 서빙 접근 규칙 (`GET /api/media/{id}`)** — JWT는 필요 없지만, 미디어는 **지금 누구나 볼 수 있는 글에 쓰인 것만** 익명에게 열린다(#95부터 메뉴 설정·글의 `membersOnly`를 따른다).
+- **공개 근거**: 공지·행사 본문과 주보 PDF는 그 메뉴가 `PUBLIC`일 때. 설교 본문은 설교 메뉴가 `PUBLIC`이고 그 설교가 `membersOnly`가 아닐 때. 갤러리 사진·앨범 설명은 갤러리 메뉴가 `PUBLIC`이고 그 앨범이 `membersOnly`가 아닐 때. 부서 본문·부서 대표 사진(`hero_media_id`)·부서에 연결된 앨범의 사진은 **항상**. 한 파일을 공개 글과 교인 전용 글이 함께 쓰면 공개다(공개 근거가 하나라도 있으면 공개). 판단은 요청 시점에 다시 계산한다(설정을 바꾸거나 콘텐츠를 지우거나 연결을 끊으면 바로 반영 — 이미 받아 간 브라우저는 최대 하루 캐시가 남는다).
+- **공개 판단과 참조 목록은 따로 묻는다**: `MediaReferenceProvider.findReferences`(삭제 차단·참조 목록)는 설정·`membersOnly`와 무관하게 **모든** 참조를 돌려주고, 공개 판단만 `hasPublicReference`로 설정을 본다. 그래서 교인 전용 글만 쓰는 파일도 삭제는 409로 막힌다.
 - **서명 없는 요청**: 공개 미디어는 파일 + `Cache-Control: public, max-age=86400`. 공개 근거가 없으면 `404 RESOURCE_NOT_FOUND`(403이 아니다 — 존재 여부를 드러내지 않는다). 단 `MEDIA_ACCESS_ENFORCED=false`(기본)이면 비공개도 200이되 `Cache-Control: private, max-age=86400`이다(전환 기간).
 - **서명 요청**: `/api/media/{id}?exp={epoch초}&sig={base64url}`. 유효하면 공개 근거와 무관하게 파일 + `private, max-age=<남은 초>`. 서명이 틀리거나 만료됐거나 `exp`·`sig` 중 하나만 있으면 404.
-- **서명 주소 발급**: 갤러리 앨범 목록의 `thumbnailUrl`, 앨범 상세의 사진별 `url`과 설명 속 `media:{id}`별 `mediaUrls`, 관리자 미디어 응답(`/api/admin/media`)의 `url`이 내려준다. 경로는 **교회 접두사 없이** `/api/media/...`로 오며 프론트가 `${NEXT_PUBLIC_API_BASE}${url}`로 조립한다. 유효 시간은 1시간.
+- **서명 주소 발급**: 갤러리 앨범 목록의 `thumbnailUrl`, 앨범 상세의 사진별 `url`과 설명 속 `media:{id}`별 `mediaUrls`, 설교·공지·일정 상세의 `mediaUrls`, 주보 카드·상세의 `url`, 관리자 미디어 응답(`/api/admin/media`)의 `url`이 내려준다. `mediaUrls`에는 본문에 나오고 같은 교회에 있는 모든 `media:{id}`가 키로 있다(다른 교회 id·없는 id는 빠진다, 본문에 없으면 빈 맵). 경로는 **교회 접두사 없이** `/api/media/...`로 오며 프론트가 `${NEXT_PUBLIC_API_BASE}${url}`로 조립한다. 유효 시간은 1시간.
 - **서명**: HMAC-SHA256, 입력 `churchId:mediaId:exp`, 키는 `JWT_SECRET`에서 파생(`HMAC-SHA256(secret, "media-url")`). 교회 id가 입력에 들어가므로 다른 교회에서는 검증되지 않는다.
 - 응답에는 항상 `X-Content-Type-Options: nosniff`, `Content-Disposition: inline`이 붙는다.
 
@@ -569,19 +605,19 @@ WHERE p.media_id = 42 AND d.deleted_at IS NULL AND a.deleted_at IS NULL;
 | PK | (tag_id, resource_type, resource_id) | |
 
 - 콘텐츠 생성·수정 시 본문과 함께 `tagIds: [1, 3]`을 받아 연결을 갱신한다(설교·공지·이벤트·갤러리 앨범 공통).
-- 목록 조회는 태그 필터를 받는다: `GET /api/sermons?tagId=2`, `GET /api/notices?tagId=2`, `GET /api/events?tagId=2`, `GET /api/gallery/albums?tagId=2`(갤러리는 GALLERY_VIEW 필요).
+- 목록 조회는 태그 필터를 받는다: `GET /api/sermons?tagId=2`, `GET /api/notices?tagId=2`, `GET /api/events?tagId=2`, `GET /api/gallery/albums?tagId=2`(열람 범위는 각 메뉴의 공개 범위 설정을 따른다, §4.5).
 - 콘텐츠 상세·목록 응답에 연결된 태그 목록(`tags: [{id, name}]`)을 포함한다.
 - 태그 삭제 시 `content_tags`의 연결 row를 함께 정리(CASCADE)한다. 콘텐츠 자체는 영향받지 않으며, 글로벌 풀이라 삭제 영향 범위가 여러 도메인에 걸친다는 점에 유의한다.
 - **설계 노트(트레이드오프):** `content_tags`는 `resource_type` + `resource_id` 조합의 polymorphic 연결이다. 단일 글로벌 태그 풀을 모든 도메인이 공유하기 위한 선택으로, DB의 FK 참조 무결성이 `resource_id`에는 적용되지 않는다(어느 도메인을 가리키는지 런타임에 결정되므로). 따라서 **참조 무결성은 애플리케이션 레벨에서 보장**한다 — 연결 생성 시 대상 리소스 존재를 검증하고, 콘텐츠 삭제(soft delete) 시 관련 content_tags 정리를 함께 처리한다.
 
 ### 5.12 갤러리 (Gallery)
 
-교회 홈페이지의 사진 갤러리 **페이지**. 앨범(묶음) 단위로 사진을 전시한다. **회원 전용 열람** — `GALLERY_VIEW` 권한(= 승인된 교인, `MEMBER` 역할)이 있어야 조회할 수 있다. 단순 가입자(USER)·비로그인 방문자는 차단된다. 이 점이 공개 조회인 다른 도메인과 다르다.
+교회 홈페이지의 사진 갤러리 **페이지**. 앨범(묶음) 단위로 사진을 전시한다. 열람 범위는 **교회 설정과 앨범 단위 `membersOnly`를 따른다**(§4.5). 기존 교회와 새 교회 모두 기본값이 `MEMBERS`(교인만 — `GALLERY_VIEW` = 승인된 교인)라, 설정을 바꾸지 않으면 단순 가입자(USER)·비로그인 방문자는 차단된다.
 
 | 메서드 | 경로 | 권한 | 설명 |
 |---|---|---|---|
-| GET | /api/gallery/albums | GALLERY_VIEW | 앨범 목록 (회원 전용, `?tagId=` 필터 지원) |
-| GET | /api/gallery/albums/{id} | GALLERY_VIEW | 앨범 상세 + 사진 목록 (회원 전용) |
+| GET | /api/gallery/albums | 설정에 따름(§4.5) | 앨범 목록 (`?tagId=` 필터, `?membersOnly=` 관리자 필터) |
+| GET | /api/gallery/albums/{id} | 설정에 따름(§4.5) | 앨범 상세 + 사진 목록 |
 | POST | /api/admin/gallery/albums | GALLERY_WRITE | 앨범 생성 (`tagIds`로 태그 연결) |
 | PATCH | /api/admin/gallery/albums/{id} | GALLERY_WRITE | 앨범 수정 (`tagIds` 갱신) |
 | DELETE | /api/admin/gallery/albums/{id} | GALLERY_WRITE | 앨범 삭제 (gallery_photos 연결만 정리, media 원본은 라이브러리에 보존) |
@@ -594,6 +630,7 @@ WHERE p.media_id = 42 AND d.deleted_at IS NULL AND a.deleted_at IS NULL;
 | id | BIGINT PK | |
 | title | VARCHAR | 예: 2026 부활절, 여름 수련회 |
 | description | TEXT | 마크다운 (선택). 본문 이미지는 `media:{id}` 참조, 미디어 삭제 차단 검색 대상 |
+| members_only | BOOLEAN | 기본 false. 앨범 단위 "교인만"(#95). 부서에 연결된 앨범은 true가 될 수 없다 |
 | created_by | BIGINT FK → members | 최초 작성자 |
 | updated_by | BIGINT FK → members | 마지막 수정자(표시용 작성자) |
 | created_at | TIMESTAMP | |
@@ -614,17 +651,17 @@ WHERE p.media_id = 42 AND d.deleted_at IS NULL AND a.deleted_at IS NULL;
 
 - 갤러리 사진은 별도 저장하지 않고 **`media` 테이블을 재사용**한다. 모든 이미지는 예외 없이 media를 거친다 — 기존 라이브러리에서 골라 연결하거나(`mediaIds`), 새 파일을 업로드하면 내부적으로 media 레코드를 먼저 생성한 뒤 gallery_photos가 참조한다(깃허브식 "업로드=라이브러리 등록"). 중앙 라이브러리 단일 원칙을 유지한다.
 - `gallery_photos`에서 사진을 제거하거나 앨범을 삭제하는 것은 **연결 해제**일 뿐, media 원본은 라이브러리에 그대로 남는다. 사진·PDF의 실제 삭제는 **오직 중앙 미디어 라이브러리에서 차단형 삭제**(`DELETE /api/admin/media/{id}`)로만 일어난다. 그 삭제는 갤러리·주보·본문 참조를 모두 검사해 하나라도 쓰이면 막는다.
-- 회원 전용이므로 `GET /api/gallery/**`는 인증 + `GALLERY_VIEW` 검증을 거친다. 갤러리에는 교인 얼굴·행사 사진 등 개인정보성 이미지가 포함될 수 있어 공개 노출을 막는 것이 목적이다.
+- 갤러리에는 교인 얼굴·행사 사진 등 개인정보성 이미지가 포함될 수 있어 기본값이 교인만이다. 메뉴를 `PUBLIC`으로 열어도 앨범마다 `membersOnly`로 닫을 수 있다. 응답: 카드·상세에 `membersOnly`·`departmentLinked`(미삭제 부서가 연결됨 — `membersOnly=true` 전환 불가 근거), 카드에 `version`(목록에서 바로 PATCH용).
 - 앨범은 공지·이벤트와 동일한 **글로벌 태그 풀**을 공유한다(`content_tags`의 `resource_type = gallery_album`). 생성·수정 시 `tagIds`로 연결.
 
 ### 5.13 주보 (Bulletin)
 
-교회 홈페이지의 주보 페이지. 날짜별 주보 PDF를 전시한다. 갤러리와 평행한 구조지만 **공개 조회**(다른 교회 관례에 맞춤)이고 PDF를 다룬다는 점이 다르다. 조회는 누구나, 쓰기만 `BULLETIN_WRITE`로 막는다(설교·공지와 같은 패턴).
+교회 홈페이지의 주보 페이지. 날짜별 주보 PDF를 전시한다. 갤러리와 평행한 구조이고 PDF를 다룬다. 기본값은 **누구나**(다른 교회 관례에 맞춤)이고 교회 설정으로 교인만으로 닫을 수 있다(§4.5). 쓰기는 `BULLETIN_WRITE`로 막는다.
 
 | 메서드 | 경로 | 권한 | 설명 |
 |---|---|---|---|
-| GET | /api/bulletins | 공개 | 목록 (주보 날짜 내림차순, 페이징) |
-| GET | /api/bulletins/{id} | 공개 | 단건 (PDF 접근 정보 포함) |
+| GET | /api/bulletins | 설정에 따름(§4.5) | 목록 (주보 날짜 내림차순, 페이징, 카드마다 PDF 서명 주소 `url`) |
+| GET | /api/bulletins/{id} | 설정에 따름(§4.5) | 단건 (PDF 서명 주소 `url` 포함) |
 | POST | /api/admin/bulletins | BULLETIN_WRITE | 업로드 (PDF media 생성 + 연결, 또는 기존 mediaId 연결) |
 | PATCH | /api/admin/bulletins/{id} | BULLETIN_WRITE | 수정 |
 | DELETE | /api/admin/bulletins/{id} | BULLETIN_WRITE | 삭제 (bulletin 레코드만 제거, PDF media 원본은 라이브러리에 보존) |
@@ -644,7 +681,7 @@ WHERE p.media_id = 42 AND d.deleted_at IS NULL AND a.deleted_at IS NULL;
 
 - 주보 PDF도 **`media` 테이블을 재사용**한다(이미지와 같은 라이브러리, mime_type으로 구분). 갤러리와 동일하게 업로드 시 media 생성 후 참조하거나 기존 PDF를 선택해 연결.
 - media 원본 삭제는 차단형을 따르며, 미디어 참조 검색에 `bulletins.media_id` FK가 포함되어 주보가 쓰는 PDF는 라이브러리에서 지울 수 없다.
-- 공개 조회이므로 `GET /api/bulletins/**`는 인증 불필요.
+- `GET /api/bulletins/**`는 메뉴가 `PUBLIC`이면 인증 불필요, `MEMBERS`면 `BULLETIN_VIEW` 필요. 카드·상세의 `url`(PDF 서명 주소, PDF 없으면 null)은 메뉴가 교인만이어도 열린다 — 서명 없는 `/api/media/{mediaId}`는 메뉴가 `PUBLIC`일 때만 열린다.
 
 ---
 
@@ -677,6 +714,14 @@ WHERE p.media_id = 42 AND d.deleted_at IS NULL AND a.deleted_at IS NULL;
 - 등록 API는 공개라 **IP당 시간당 5건** 레이트리밋을 둔다(Redis `inquiry:rl:{ip}` INCR + TTL 1h). 초과 시 `429 RATE_LIMIT_EXCEEDED`. CAPTCHA는 두지 않는다 — 스팸이 실제로 뚫리면 그때 올린다.
 - 문의 내용은 등록 후 수정하지 않는다. 관리자가 바꾸는 값은 완료 플래그뿐이고, 완료 토글은 멱등이라 요청에 `version`을 요구하지 않는다(JPA `@Version`은 백스톱으로 유지).
 - 답변 본문·상태 머신(대기/진행중/완료)·관리자 메모는 **의도적 비기능**. 필요해지면 컬럼을 하나씩 추가한다.
+
+### 5.15 공개 범위 (Visibility, #95)
+| 메서드 | 경로 | 권한 | 설명 |
+|---|---|---|---|
+| GET | /api/visibility | 공개 | `{ notices, events, bulletins, sermons, gallery }` 각 `PUBLIC`·`MEMBERS`. 프론트가 메뉴별 게이트를 켤지 정하는 근거 |
+| PUT | /api/admin/visibility | VISIBILITY_MANAGE | 5개 값을 한 번에 저장(하나라도 빠지거나 다른 값이면 400). 설정 캐시 갱신 + `main` 캐시 무효화 |
+
+**content_visibility 테이블**: `church_id`, `domain`(`NOTICE`·`EVENT`·`BULLETIN`·`SERMON`·`GALLERY`), `level`(`PUBLIC`·`MEMBERS`, 문자열 — 나중에 단계를 더할 수 있게), `(church_id, domain)` 유니크. 규칙은 §4.5.
 
 ---
 
@@ -762,7 +807,7 @@ com.elipair.church
 
 ## 9. Redis 사용처
 - Refresh Token 저장, 로그아웃 토큰 블랙리스트
-- `/api/main`, 설교 목록 첫 페이지 캐싱 (`@Cacheable`)
+- `/api/main`, 설교 목록 첫 페이지 캐싱 (`@Cacheable`), 교회별 공개 범위 설정(`visibility`)
 - 콘텐츠 CUD 시 해당 캐시 키 무효화 (`@CacheEvict`)
 - 설교·공지 조회수(view_count) 카운팅 후 주기적으로 DB 반영
 - 로그인 실패 횟수 제한(§4.1), 문의 등록 제한(§5.14)
@@ -820,7 +865,7 @@ FILE_MAX_SIZE=10485760       # 업로드 최대 크기(바이트). 운영자 조
 ## 12. 새 교회 등록 체크리스트
 코드 수정·재배포·DNS 작업이 없다. 정본 절차는 `docs/setup-new-church.md`.
 1. 운영 서버에 SSH 접속 → `cd /srv/church-backend && ./scripts/new-church.sh`.
-2. 교회 이름, slug, 프론트 주소, 교회 대표자 전화번호·이름·임시 비밀번호를 입력한다. 스크립트가 `churches` 행 + 기본 역할 4종 + 대표자(SUPER_ADMIN)를 원자적으로 만든다.
+2. 교회 이름, slug, 프론트 주소, 교회 대표자 전화번호·이름·임시 비밀번호를 입력한다. 스크립트가 `churches` 행 + 기본 역할 4종 + 대표자(SUPER_ADMIN) + 메뉴 공개 범위 5행(갤러리만 교인만, 나머지 누구나 — §4.5)을 원자적으로 만든다.
 3. 출력된 `NEXT_PUBLIC_API_BASE=https://<공용API>/church/<slug>`를 그 교회 프론트 환경변수에 넣고 빌드·배포한다.
 4. `curl -s https://<공용API>/church/<slug>/api/main`이 200인지 확인한다.
 5. 대표자에게 전화번호와 임시 비밀번호를 전달한다. 대표자는 로그인해 비밀번호를 바꾼다.

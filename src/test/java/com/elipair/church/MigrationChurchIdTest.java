@@ -44,7 +44,8 @@ class MigrationChurchIdTest {
             "challenge_reading_logs",
             "inquiries",
             "vehicle_runs",
-            "vehicle_requests");
+            "vehicle_requests",
+            "content_visibility"); // #95 V21
 
     @PersistenceContext
     private EntityManager em;

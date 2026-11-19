@@ -31,4 +31,11 @@ public interface GalleryAlbumRepository
                     "select id as id, title as title from gallery_albums where church_id = :churchId and deleted_at is null and description ~ :pattern",
             nativeQuery = true)
     List<GalleryAlbumRefRow> findReferencesByMedia(@Param("pattern") String pattern, @Param("churchId") long churchId);
+
+    /** 공개 판단용 — 설명에서 이 미디어를 쓰는 "교인만"이 아닌 미삭제 앨범이 있는가. */
+    @Query(
+            value = "select exists(select 1 from gallery_albums where church_id = :churchId and deleted_at is null"
+                    + " and members_only = false and description ~ :pattern)",
+            nativeQuery = true)
+    boolean existsPublicReferenceByMedia(@Param("pattern") String pattern, @Param("churchId") long churchId);
 }

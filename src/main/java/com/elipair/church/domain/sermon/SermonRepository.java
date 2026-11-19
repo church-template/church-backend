@@ -26,4 +26,11 @@ public interface SermonRepository extends JpaRepository<Sermon, Long>, JpaSpecif
                     + "where church_id = :churchId and deleted_at is null and content ~ :pattern",
             nativeQuery = true)
     List<SermonRefRow> findReferencesByMedia(@Param("pattern") String pattern, @Param("churchId") long churchId);
+
+    /** 공개 판단용 — 위 참조 중 "교인만"이 아닌 설교가 하나라도 있는가(삭제 차단은 위 쿼리를 그대로 쓴다). */
+    @Query(
+            value = "select exists(select 1 from sermons where church_id = :churchId and deleted_at is null"
+                    + " and members_only = false and content ~ :pattern)",
+            nativeQuery = true)
+    boolean existsPublicReferenceByMedia(@Param("pattern") String pattern, @Param("churchId") long churchId);
 }

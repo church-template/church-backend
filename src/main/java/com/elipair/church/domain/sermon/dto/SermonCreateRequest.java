@@ -33,4 +33,6 @@ public record SermonCreateRequest(
         @Schema(description = "설교 날짜(yyyy-MM-dd)", example = "2026-06-01") @NotNull
         LocalDate preachedAt,
 
-        @Schema(description = "태그 ID 목록") List<Long> tagIds) {}
+        @Schema(description = "태그 ID 목록") List<Long> tagIds,
+
+        @Schema(description = "교인만 보기(#95). 생략하면 false") Boolean membersOnly) {}

@@ -1,6 +1,6 @@
 -- 새 교회 등록(#86). 직접 실행하지 말고 scripts/new-church.sh로 실행한다(값 검증·확인·비밀번호 입력을 맡는다).
 --
--- 만드는 것: churches 1행, 기본 역할 4종, 역할별 권한 연결, 교회 대표자 회원 1명(SUPER_ADMIN).
+-- 만드는 것: churches 1행, 기본 역할 4종, 역할별 권한 연결, 메뉴 공개 범위 5행, 교회 대표자 회원 1명(SUPER_ADMIN).
 -- 전부 하나의 DO 블록 안이라 원자적이다 — 중간에 실패하면 아무것도 남지 않는다.
 --
 -- 값은 psql 변수로 받는다: name, slug, origin, phone, owner_name, pw.
@@ -63,8 +63,17 @@ BEGIN
     INSERT INTO role_permissions (role_id, permission_id)
     SELECT r.id, p.id
     FROM roles r
-    JOIN permissions p ON p.name IN ('GALLERY_VIEW', 'SERMON_VIEW', 'CHALLENGE_PARTICIPATE', 'VEHICLE_APPLY')
+    JOIN permissions p ON p.name IN ('GALLERY_VIEW', 'SERMON_VIEW', 'NOTICE_VIEW', 'EVENT_VIEW', 'BULLETIN_VIEW',
+                                     'CHALLENGE_PARTICIPATE', 'VEHICLE_APPLY')
     WHERE r.church_id = v_church AND r.name = 'MEMBER';
+
+    -- 메뉴 공개 범위(#95). 새 교회는 갤러리만 교인만, 나머지는 누구나(설계 5.2 — 행이 없을 때의 코드 기본값과 같다).
+    INSERT INTO content_visibility (church_id, domain, level, created_at) VALUES
+        (v_church, 'NOTICE',   'PUBLIC',  now()),
+        (v_church, 'EVENT',    'PUBLIC',  now()),
+        (v_church, 'BULLETIN', 'PUBLIC',  now()),
+        (v_church, 'SERMON',   'PUBLIC',  now()),
+        (v_church, 'GALLERY',  'MEMBERS', now());
 
     -- 교회 대표자 = 그 교회의 SUPER_ADMIN. 비밀번호는 BCrypt cost 10(앱의 BCryptPasswordEncoder와 같다).
     INSERT INTO members (uuid, phone, name, password, terms_agreed, privacy_agreed, agreed_at, created_at, church_id)

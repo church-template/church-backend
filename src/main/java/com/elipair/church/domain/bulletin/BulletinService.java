@@ -46,7 +46,8 @@ public class BulletinService {
                 b.getServiceDate(),
                 b.getMediaId(),
                 b.getCreatedAt(),
-                authorMap.getOrDefault(b.getUpdatedBy(), AuthorDisplayService.UNKNOWN)));
+                authorMap.getOrDefault(b.getUpdatedBy(), AuthorDisplayService.UNKNOWN),
+                pdfUrl(b)));
     }
 
     public BulletinDetailResponse get(Long id) {
@@ -150,6 +151,12 @@ public class BulletinService {
                 authorDisplayService.displayName(b.getUpdatedBy()),
                 b.getCreatedAt(),
                 b.getUpdatedAt(),
-                b.getVersion());
+                b.getVersion(),
+                pdfUrl(b));
+    }
+
+    // 주보 메뉴가 교인만이면 서명 없는 /api/media/{id}는 404라 응답이 서명 주소를 실어야 한다(설계 6.2). PDF 없는 옛 행은 null.
+    private String pdfUrl(Bulletin b) {
+        return b.getMediaId() == null ? null : mediaService.signedUrl(b.getMediaId());
     }
 }

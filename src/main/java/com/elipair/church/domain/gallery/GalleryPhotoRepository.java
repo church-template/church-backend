@@ -42,4 +42,12 @@ public interface GalleryPhotoRepository extends JpaRepository<GalleryPhoto, Long
                     + "where p.church_id = :churchId and p.media_id = :mediaId and a.deleted_at is null",
             nativeQuery = true)
     List<GalleryPhotoRefRow> findReferencesByMediaId(@Param("mediaId") long mediaId, @Param("churchId") long churchId);
+
+    /** 공개 판단용 — 이 미디어가 "교인만"이 아닌 미삭제 앨범의 사진인가. */
+    @Query(
+            value = "select exists(select 1 from gallery_photos p join gallery_albums a on a.id = p.album_id"
+                    + " where p.church_id = :churchId and a.church_id = :churchId and p.media_id = :mediaId"
+                    + " and a.deleted_at is null and a.members_only = false)",
+            nativeQuery = true)
+    boolean existsPublicReferenceByMediaId(@Param("mediaId") long mediaId, @Param("churchId") long churchId);
 }

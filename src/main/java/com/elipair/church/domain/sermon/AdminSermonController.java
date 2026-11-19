@@ -35,7 +35,7 @@ public class AdminSermonController {
                     새 설교를 등록한다(201 Created).
 
                     - 인증(JWT): 필요 — `SERMON_WRITE`
-                    - 요청 본문: `SermonCreateRequest` — 제목·설교자·시리즈·성경구절·본문·영상/오디오 URL·설교일(`title`·`preacher`·`preachedAt` 필수)·`tagIds`
+                    - 요청 본문: `SermonCreateRequest` — 제목·설교자·시리즈·성경구절·본문·영상/오디오 URL·설교일(`title`·`preacher`·`preachedAt` 필수)·`tagIds`·`membersOnly`(교인만 보기, 생략 시 false)
                     - 반환값: `SermonDetailResponse` — 생성된 설교 상세
                     - 부수효과: `tagIds`로 태그 연결 · 메인 통합 API 캐시(`main`) 무효화
                     """)
@@ -49,7 +49,7 @@ public class AdminSermonController {
 
                     - 인증(JWT): 필요 — `SERMON_WRITE`
                     - 경로 변수: `id` — 수정할 설교 ID
-                    - 요청 본문: `SermonUpdateRequest` — 제목·설교자·시리즈·성경구절·본문·영상/오디오 URL·설교일·`tagIds`·`version`(낙관락 비교용 필수)
+                    - 요청 본문: `SermonUpdateRequest` — 제목·설교자·시리즈·성경구절·본문·영상/오디오 URL·설교일·`tagIds`·`membersOnly`(PUT에서 membersOnly를 보내지 않으면 유지)·`version`(낙관락 비교용 필수)
                     - 반환값: `SermonDetailResponse` — 수정된 설교 상세(`version`은 증가 후 값)
                     - 부수효과: `version` 불일치 시 409 OPTIMISTIC_LOCK_CONFLICT · `tagIds`로 태그 재연결 · 메인 캐시(`main`) 무효화
                     """)
@@ -63,7 +63,7 @@ public class AdminSermonController {
 
                     - 인증(JWT): 필요 — `SERMON_WRITE`
                     - 경로 변수: `id` — 수정할 설교 ID
-                    - 요청 본문: `SermonPatchRequest` — 변경할 필드만(제목·설교자·시리즈·성경구절·본문·영상/오디오 URL·설교일·`tagIds`)·`version`(필수)
+                    - 요청 본문: `SermonPatchRequest` — 변경할 필드만(제목·설교자·시리즈·성경구절·본문·영상/오디오 URL·설교일·`tagIds`·`membersOnly`)·`version`(필수)
                     - 반환값: `SermonDetailResponse` — 수정된 설교 상세(`version`은 증가 후 값)
                     - 부수효과: `version` 불일치 시 409 OPTIMISTIC_LOCK_CONFLICT · `tagIds` 전달 시 태그 재연결 · 메인 캐시(`main`) 무효화
                     """)

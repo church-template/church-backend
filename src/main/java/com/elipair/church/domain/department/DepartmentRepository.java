@@ -1,5 +1,6 @@
 package com.elipair.church.domain.department;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,6 +16,10 @@ public interface DepartmentRepository extends JpaRepository<Department, Long> {
 
     /** 삭제 차단용 — 살아있는 자식 존재 여부(soft-deleted 자식 제외). */
     boolean existsByParentIdAndDeletedAtIsNull(Long parentId);
+
+    /** 미삭제 부서가 연결한 앨범 id(#95) — 앨범 카드·상세의 departmentLinked, 교인 전용 전환 차단. 앨범 묶음을 한 번에 본다. */
+    @Query("select distinct d.albumId from Department d where d.deletedAt is null and d.albumId in :albumIds")
+    List<Long> findLinkedAlbumIds(@Param("albumIds") Collection<Long> albumIds);
 
     /** create append 기준값(미삭제 행 최대 sort_order). 없으면 서비스가 10으로 시작. */
     @Query("select max(d.sortOrder) from Department d where d.deletedAt is null")

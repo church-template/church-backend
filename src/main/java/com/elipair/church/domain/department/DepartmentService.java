@@ -182,6 +182,10 @@ public class DepartmentService {
         if (albumId != null && albumService.findLivePhotoMediaIds(albumId).isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "존재하지 않는 앨범입니다");
         }
+        // 부서 소개는 연결 앨범 사진을 누구에게나 보여 주므로 교인 전용 앨범은 연결할 수 없다(설계 6.2, #95)
+        if (albumId != null && albumService.isMembersOnlyAlbum(albumId)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE, "교인 전용 앨범은 부서에 연결할 수 없습니다");
+        }
     }
 
     private DepartmentDetailResponse detail(Department d) {

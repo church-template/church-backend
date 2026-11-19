@@ -22,4 +22,9 @@ public record SermonCardResponse(
         @Schema(description = "연결된 태그 목록") List<TagResponse> tags,
 
         @Schema(description = "표시 작성자(updated_by)", example = "김목사")
-        String author) {}
+        String author,
+
+        @Schema(description = "글 단위 교인 전용 여부(#95)") boolean membersOnly,
+
+        @Schema(description = "낙관락 version — 목록에서 바로 membersOnly를 PATCH할 때 보낸다(#95)")
+        Long version) {}

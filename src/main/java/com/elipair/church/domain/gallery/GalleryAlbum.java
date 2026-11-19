@@ -31,6 +31,10 @@ public class GalleryAlbum extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    /** 글 단위 "교인만"(#95). 메뉴 설정과 독립이라 메뉴를 바꿔도 지워지지 않는다. */
+    @Column(name = "members_only", nullable = false)
+    private boolean membersOnly;
+
     private GalleryAlbum(String title, String description) {
         this.title = title;
         this.description = description;
@@ -38,6 +42,10 @@ public class GalleryAlbum extends BaseEntity {
 
     public static GalleryAlbum create(String title, String description) {
         return new GalleryAlbum(title, description);
+    }
+
+    public void changeMembersOnly(boolean membersOnly) {
+        this.membersOnly = membersOnly;
     }
 
     /** PATCH 부분 수정 — null 인자는 미변경. */

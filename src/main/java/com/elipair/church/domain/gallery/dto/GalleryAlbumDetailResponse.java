@@ -16,4 +16,6 @@ public record GalleryAlbumDetailResponse(
         LocalDateTime updatedAt,
         Long version,
         List<GalleryPhotoResponse> photos,
-        Map<Long, String> mediaUrls) {}
+        Map<Long, String> mediaUrls,
+        boolean membersOnly,
+        boolean departmentLinked) {}

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.elipair.church.domain.media.MediaService;
 import com.elipair.church.domain.member.AuthorDisplayService;
 import com.elipair.church.domain.sermon.dto.SermonCreateRequest;
 import com.elipair.church.domain.sermon.dto.SermonPatchRequest;
@@ -38,14 +39,15 @@ class SermonServiceTest {
         contentTagService = mock(ContentTagService.class);
         authorDisplayService = mock(AuthorDisplayService.class);
         viewCountStore = mock(ViewCountStore.class);
-        service = new SermonService(repository, contentTagService, authorDisplayService, viewCountStore);
+        service = new SermonService(
+                repository, contentTagService, authorDisplayService, viewCountStore, mock(MediaService.class));
         when(contentTagService.getTags(any(), any())).thenReturn(List.of());
         when(authorDisplayService.displayName(any())).thenReturn("관리자");
     }
 
     private SermonCreateRequest createReq() {
         return new SermonCreateRequest(
-                "제목", "김목사", "시리즈", "마 5", "본문", null, null, LocalDate.of(2026, 1, 1), List.of(1L, 2L));
+                "제목", "김목사", "시리즈", "마 5", "본문", null, null, LocalDate.of(2026, 1, 1), List.of(1L, 2L), null);
     }
 
     private Sermon mockSermonWithVersion(long version) {
@@ -71,7 +73,7 @@ class SermonServiceTest {
         Sermon s = mockSermonWithVersion(3L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(s));
         SermonUpdateRequest req = new SermonUpdateRequest(
-                "새제목", "이목사", null, null, "새본문", null, null, LocalDate.of(2026, 2, 2), List.of(5L), 3L);
+                "새제목", "이목사", null, null, "새본문", null, null, LocalDate.of(2026, 2, 2), List.of(5L), null, 3L);
 
         service.update(10L, req);
 
@@ -84,7 +86,7 @@ class SermonServiceTest {
         Sermon s = mockSermonWithVersion(3L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(s));
         SermonUpdateRequest req = new SermonUpdateRequest(
-                "새제목", "이목사", null, null, "새본문", null, null, LocalDate.of(2026, 2, 2), List.of(5L), 2L);
+                "새제목", "이목사", null, null, "새본문", null, null, LocalDate.of(2026, 2, 2), List.of(5L), null, 2L);
 
         assertThatThrownBy(() -> service.update(10L, req))
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())
@@ -97,7 +99,8 @@ class SermonServiceTest {
     void patch_with_null_tagIds_keeps_tags() {
         Sermon s = mockSermonWithVersion(0L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(s));
-        SermonPatchRequest req = new SermonPatchRequest("부분제목", null, null, null, null, null, null, null, null, 0L);
+        SermonPatchRequest req =
+                new SermonPatchRequest("부분제목", null, null, null, null, null, null, null, null, null, 0L);
 
         service.patch(10L, req);
 
@@ -109,7 +112,8 @@ class SermonServiceTest {
     void patch_with_stale_version_throws_409_and_skips_changes() {
         Sermon s = mockSermonWithVersion(3L);
         when(repository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(s));
-        SermonPatchRequest req = new SermonPatchRequest("부분제목", null, null, null, null, null, null, null, null, 2L);
+        SermonPatchRequest req =
+                new SermonPatchRequest("부분제목", null, null, null, null, null, null, null, null, null, 2L);
 
         assertThatThrownBy(() -> service.patch(10L, req))
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode())

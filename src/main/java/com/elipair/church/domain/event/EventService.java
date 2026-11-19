@@ -5,6 +5,8 @@ import com.elipair.church.domain.event.dto.EventCreateRequest;
 import com.elipair.church.domain.event.dto.EventDetailResponse;
 import com.elipair.church.domain.event.dto.EventPatchRequest;
 import com.elipair.church.domain.event.dto.EventUpdateRequest;
+import com.elipair.church.domain.media.MediaRefs;
+import com.elipair.church.domain.media.MediaService;
 import com.elipair.church.domain.tag.ContentResourceType;
 import com.elipair.church.domain.tag.ContentTagService;
 import com.elipair.church.domain.tag.dto.TagResponse;
@@ -33,10 +35,12 @@ public class EventService {
 
     private final EventRepository repository;
     private final ContentTagService contentTagService;
+    private final MediaService mediaService;
 
-    public EventService(EventRepository repository, ContentTagService contentTagService) {
+    public EventService(EventRepository repository, ContentTagService contentTagService, MediaService mediaService) {
         this.repository = repository;
         this.contentTagService = contentTagService;
+        this.mediaService = mediaService;
     }
 
     public Page<EventCardResponse> list(DateRange range, Long tagId, Pageable pageable) {
@@ -158,6 +162,7 @@ public class EventService {
                 e.getCreatedAt(),
                 e.getUpdatedAt(),
                 e.getVersion(),
-                contentTagService.getTags(TYPE, e.getId()));
+                contentTagService.getTags(TYPE, e.getId()),
+                mediaService.signedUrls(MediaRefs.ids(e.getDescription())));
     }
 }

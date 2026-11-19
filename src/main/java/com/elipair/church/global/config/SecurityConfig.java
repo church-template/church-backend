@@ -25,9 +25,9 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 /**
- * 경로 인가(스펙 §4.3): /api/admin/** 인증(세부 권한은 메서드 @PreAuthorize), /api/gallery/** GALLERY_VIEW,
- * /api/bible-challenges/** CHALLENGE_PARTICIPATE, /api/sermons/** SERMON_VIEW(회원 전용), /api/vehicle-runs/** VEHICLE_APPLY,
- * 그 외 공개.
+ * 경로 인가(스펙 §4.3): /api/admin/** 인증(세부 권한은 메서드 @PreAuthorize),
+ * /api/bible-challenges/** CHALLENGE_PARTICIPATE, /api/vehicle-runs/** VEHICLE_APPLY, 그 외 공개.
+ * 공지·일정·주보·설교·갤러리 읽기 경로는 교회별 공개 범위 설정을 따르므로 매처가 아니라 컨트롤러의 ContentAccessGuard가 판단한다(#95).
  * JWT 필터·인증 실패 RFC 7807 변환·CORS·메서드 보안을 배선한다.
  */
 @Configuration
@@ -66,12 +66,8 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers("/api/admin/**")
                         .authenticated()
-                        .requestMatchers("/api/gallery/**")
-                        .hasAuthority("GALLERY_VIEW")
                         .requestMatchers("/api/bible-challenges/**")
                         .hasAuthority("CHALLENGE_PARTICIPATE")
-                        .requestMatchers("/api/sermons/**")
-                        .hasAuthority("SERMON_VIEW")
                         .requestMatchers("/api/vehicle-runs/**")
                         .hasAuthority("VEHICLE_APPLY")
                         .anyRequest()
